@@ -177,7 +177,7 @@ async function main() {
       try {
         const output = execSync(
           `cd "${resolve(SOLVER_DIR, lab.solverDir)}" && python3 ${lab.scriptName} -U "${base}" 2>&1 || true`,
-          { timeout: 120000, maxBuffer: 1024 * 1024 }
+          { timeout: 300000, maxBuffer: 1024 * 1024 }
         ).toString();
         
         const lastLines = output.split("\n").slice(-10).join("\n");
