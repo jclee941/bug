@@ -175,9 +175,13 @@ async function main() {
 
       // Run Python solver (no proxy)
       try {
+        // Add default args for solvers that need extra params
+        let extraArgs = "";
+        if (lab.solverDir === "DirectoryTraversal") extraArgs = ' -F /etc/passwd';
+        if (lab.solverDir === "OSCommandInjection" && lab.labNum >= 3) extraArgs = ' -C whoami';
         const output = execSync(
-          `cd "${resolve(SOLVER_DIR, lab.solverDir)}" && python3 ${lab.scriptName} -U "${base}" 2>&1 || true`,
-          { timeout: 300000, maxBuffer: 1024 * 1024 }
+          `cd "${resolve(SOLVER_DIR, lab.solverDir)}" && python3 ${lab.scriptName} -U "${base}"${extraArgs} 2>&1 || true`,
+          { timeout: 600000, maxBuffer: 1024 * 1024 }
         ).toString();
         
         const lastLines = output.split("\n").slice(-10).join("\n");
