@@ -1,0 +1,25 @@
+{
+  "targets": [
+    {
+      "domain": "example.com",
+      "platform": "hackerone",
+      "program_url": "https://hackerone.com/example",
+      "scope": ["*.example.com", "api.example.com"],
+      "out_of_scope": ["staging.example.com", "*.dev.example.com"],
+      "severity_filter": "medium,high,critical",
+      "rate_limit": 100,
+      "notes": "E-commerce platform, focus on payment APIs and IDOR",
+      "active": false
+    }
+  ],
+  "notifications": {
+    "discord_webhook": "",
+    "enabled": false
+  },
+  "defaults": {
+    "severity": "medium,high,critical",
+    "rate_limit": 100,
+    "nuclei_threads": 25,
+    "katana_depth": 3
+  }
+}

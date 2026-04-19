@@ -1,0 +1,27 @@
+# Scan results (contain target-specific data)
+recon/
+targets/
+reports/
+
+# Downloaded wordlists (reproducible via make setup)
+wordlists/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Go
+*.exe
+*.test
+*.out
+
+# Temp
+*.tmp
+*.log
