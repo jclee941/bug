@@ -39,7 +39,7 @@ const TOPIC_MAP = {
   "file-path-traversal": "DirectoryTraversal",
   "access-control": "AccessControl",
   "authentication": "Authentication",
-  "websockets": "WebSockets",
+  "websockets": "Websockets",
   "deserialization": "InsecureDeserialization",
   "information-disclosure": "InformationDisclosure",
   "logic-flaws": "BusinessLogic",
