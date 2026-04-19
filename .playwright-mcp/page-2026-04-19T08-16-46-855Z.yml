@@ -1,0 +1,135 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link [ref=e4] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e5]:
+        - link "My account" [ref=e7] [cursor=pointer]:
+          - /url: /users/youraccount/personaldetails
+        - text:       
+  - navigation [ref=e11]:
+    - generic [ref=e12] [cursor=pointer]:
+      - generic [ref=e13]: Academy home
+      - generic [ref=e14]: 
+    - text:           
+  - generic [ref=e16]:
+    - complementary [ref=e17]:
+      - navigation [ref=e18]:
+        - generic [ref=e19] [cursor=pointer]: 󡀓 Menu
+    - main [ref=e20]:
+      - list [ref=e21]:
+        - listitem [ref=e22]:
+          - link "Web Security Academy" [ref=e23] [cursor=pointer]:
+            - /url: /web-security
+        - listitem [ref=e24]:
+          - text: ">"
+          - link "All labs" [ref=e25] [cursor=pointer]:
+            - /url: /web-security/all-labs
+      - generic [ref=e26]:
+        - heading "All labs" [level=1] [ref=e27]
+        - generic [ref=e28]:
+          - heading "Mystery lab challenge" [level=4] [ref=e29]
+          - paragraph [ref=e30]: Try solving a random lab with the title and description hidden. As you'll have no prior knowledge of the type of vulnerability that you need to find and exploit, this is great for practicing recon and analysis.
+          - link "Take me to the mystery lab challenge " [ref=e31] [cursor=pointer]:
+            - /url: https://portswigger.net/web-security/mystery-lab-challenge
+        - generic [ref=e32]:
+          - heading "SQL injection" [level=2] [ref=e33]
+          - heading "Cross-site scripting" [level=2] [ref=e34]
+          - heading "Cross-site request forgery (CSRF)" [level=2] [ref=e35]
+          - heading "Clickjacking" [level=2] [ref=e36]
+          - heading "DOM-based vulnerabilities" [level=2] [ref=e37]
+          - heading "Cross-origin resource sharing (CORS)" [level=2] [ref=e38]
+          - heading "XML external entity (XXE) injection" [level=2] [ref=e39]
+          - heading "Server-side request forgery (SSRF)" [level=2] [ref=e40]
+          - heading "HTTP request smuggling" [level=2] [ref=e41]
+          - heading "OS command injection" [level=2] [ref=e42]
+          - heading "Server-side template injection" [level=2] [ref=e43]
+          - heading "Path traversal" [level=2] [ref=e44]
+          - heading "Access control vulnerabilities" [level=2] [ref=e45]
+          - heading "Authentication" [level=2] [ref=e46]
+          - heading "WebSockets" [level=2] [ref=e47]
+          - heading "Web cache poisoning" [level=2] [ref=e48]
+          - heading "Insecure deserialization" [level=2] [ref=e49]
+          - heading "Information disclosure" [level=2] [ref=e50]
+          - heading "Business logic vulnerabilities" [level=2] [ref=e51]
+          - heading "HTTP Host header attacks" [level=2] [ref=e52]
+          - heading "OAuth authentication" [level=2] [ref=e53]
+          - heading "File upload vulnerabilities" [level=2] [ref=e54]
+          - heading "JWT" [level=2] [ref=e55]
+          - heading "Essential skills" [level=2] [ref=e56]
+          - heading "Prototype pollution" [level=2] [ref=e57]
+          - heading "GraphQL API vulnerabilities" [level=2] [ref=e58]
+          - heading "Race conditions" [level=2] [ref=e59]
+          - heading "NoSQL injection" [level=2] [ref=e60]
+          - heading "API testing" [level=2] [ref=e61]
+          - heading "Web LLM attacks" [level=2] [ref=e62]
+          - heading "Web cache deception" [level=2] [ref=e63]
+      - generic [ref=e66]:
+        - img "Try Burp Suite for Free" [ref=e67]
+        - heading "Find vulnerabilities using Burp Suite" [level=4] [ref=e68]
+        - link "Try for free" [ref=e69] [cursor=pointer]:
+          - /url: https://portswigger.net/burp
+  - contentinfo [ref=e70]:
+    - generic [ref=e71]:
+      - generic [ref=e72]:
+        - paragraph [ref=e73]: Burp Suite
+        - link "Web vulnerability scanner" [ref=e74] [cursor=pointer]:
+          - /url: /burp/vulnerability-scanner
+        - link "Burp Suite Editions" [ref=e75] [cursor=pointer]:
+          - /url: /burp
+        - link "Release Notes" [ref=e76] [cursor=pointer]:
+          - /url: /burp/releases
+      - generic [ref=e77]:
+        - paragraph [ref=e78]: Vulnerabilities
+        - link "Cross-site scripting (XSS)" [ref=e79] [cursor=pointer]:
+          - /url: /web-security/cross-site-scripting
+        - link "SQL injection" [ref=e80] [cursor=pointer]:
+          - /url: /web-security/sql-injection
+        - link "Cross-site request forgery" [ref=e81] [cursor=pointer]:
+          - /url: /web-security/csrf
+        - link "XML external entity injection" [ref=e82] [cursor=pointer]:
+          - /url: /web-security/xxe
+        - link "Directory traversal" [ref=e83] [cursor=pointer]:
+          - /url: /web-security/file-path-traversal
+        - link "Server-side request forgery" [ref=e84] [cursor=pointer]:
+          - /url: /web-security/ssrf
+      - generic [ref=e85]:
+        - paragraph [ref=e86]: Customers
+        - link "Organizations" [ref=e87] [cursor=pointer]:
+          - /url: /organizations
+        - link "Testers" [ref=e88] [cursor=pointer]:
+          - /url: /testers
+        - link "Developers" [ref=e89] [cursor=pointer]:
+          - /url: /developers
+      - generic [ref=e90]:
+        - paragraph [ref=e91]: Company
+        - link "About" [ref=e92] [cursor=pointer]:
+          - /url: /about
+        - link "Careers" [ref=e93] [cursor=pointer]:
+          - /url: /careers
+        - link "Contact" [ref=e94] [cursor=pointer]:
+          - /url: /about/contact
+        - link "Legal" [ref=e95] [cursor=pointer]:
+          - /url: /legal
+        - link "Privacy Notice" [ref=e96] [cursor=pointer]:
+          - /url: /privacy
+      - generic [ref=e97]:
+        - paragraph [ref=e98]: Insights
+        - link "Web Security Academy" [ref=e99] [cursor=pointer]:
+          - /url: /web-security
+        - link "Blog" [ref=e100] [cursor=pointer]:
+          - /url: /blog
+        - link "Research" [ref=e101] [cursor=pointer]:
+          - /url: /research
+      - generic [ref=e102]:
+        - link "PortSwigger Logo" [ref=e103] [cursor=pointer]:
+          - /url: /
+          - img "PortSwigger Logo" [ref=e104]
+        - link " Follow us" [ref=e105] [cursor=pointer]:
+          - /url: https://twitter.com/Burp_Suite
+          - generic [ref=e106]: 
+          - text: Follow us
+        - paragraph [ref=e107]: © 2026 PortSwigger Ltd.
+  - link [ref=e108] [cursor=pointer]:
+    - /url: "#top"
+    - img [ref=e109]
