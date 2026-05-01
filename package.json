@@ -1,8 +1,9 @@
 {
   "name": "bug",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Bug bounty automation toolkit",
+  "type": "module",
+  "main": "scripts/lab-runner.mjs",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

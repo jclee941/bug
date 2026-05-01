@@ -22,36 +22,36 @@ help: ## Show available commands
 	@echo ""
 
 setup: ## Initial setup — verify tools, download wordlists
-	$(GO) $(SCRIPTS)/setup.go
+	$(GO) $(SCRIPTS)/setup.go $(SCRIPTS)/lib.go
 
 recon: ## Run full recon pipeline on TARGET
 	@test -n "$(TARGET)" || (echo "Error: TARGET required. Usage: make recon TARGET=domain.com" && exit 1)
-	$(GO) $(SCRIPTS)/recon.go -d $(TARGET)
+	$(GO) $(SCRIPTS)/recon.go $(SCRIPTS)/lib.go -d $(TARGET)
 
 recon-fast: ## Quick recon — skip nuclei scan
 	@test -n "$(TARGET)" || (echo "Error: TARGET required" && exit 1)
-	$(GO) $(SCRIPTS)/recon.go -d $(TARGET) -skip-nuclei
+	$(GO) $(SCRIPTS)/recon.go $(SCRIPTS)/lib.go -d $(TARGET) -skip-nuclei
 
 monitor: ## Diff monitoring — detect new subdomains/endpoints
 	@test -n "$(TARGET)" || (echo "Error: TARGET required" && exit 1)
-	$(GO) $(SCRIPTS)/monitor.go -d $(TARGET)
+	$(GO) $(SCRIPTS)/monitor.go $(SCRIPTS)/lib.go -d $(TARGET)
 
 hunt: ## Targeted vulnerability hunting on TARGET
 	@test -n "$(TARGET)" || (echo "Error: TARGET required" && exit 1)
-	$(GO) $(SCRIPTS)/hunt.go -d $(TARGET)
+	$(GO) $(SCRIPTS)/hunt.go $(SCRIPTS)/lib.go -d $(TARGET)
 
 hunt-idor: ## Hunt IDOR vulnerabilities only
 	@test -n "$(TARGET)" || (echo "Error: TARGET required" && exit 1)
-	$(GO) $(SCRIPTS)/hunt.go -d $(TARGET) -type idor
+	$(GO) $(SCRIPTS)/hunt.go $(SCRIPTS)/lib.go -d $(TARGET) -type idor
 
 hunt-ssrf: ## Hunt SSRF vulnerabilities only
 	@test -n "$(TARGET)" || (echo "Error: TARGET required" && exit 1)
-	$(GO) $(SCRIPTS)/hunt.go -d $(TARGET) -type ssrf
+	$(GO) $(SCRIPTS)/hunt.go $(SCRIPTS)/lib.go -d $(TARGET) -type ssrf
 
 full-scan: ## Full pipeline — recon + hunt
 	@test -n "$(TARGET)" || (echo "Error: TARGET required" && exit 1)
-	$(GO) $(SCRIPTS)/recon.go -d $(TARGET)
-	$(GO) $(SCRIPTS)/hunt.go -d $(TARGET) -recon-dir $$(ls -td recon/$(TARGET)_* 2>/dev/null | head -1)
+	$(GO) $(SCRIPTS)/recon.go $(SCRIPTS)/lib.go -d $(TARGET)
+	$(GO) $(SCRIPTS)/hunt.go $(SCRIPTS)/lib.go -d $(TARGET) -recon-dir $$(ls -td recon/$(TARGET)_* 2>/dev/null | head -1)
 
 clean: ## Remove all scan results
 	rm -rf recon/

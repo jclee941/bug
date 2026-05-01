@@ -8,9 +8,10 @@
  */
 import { chromium } from "playwright";
 
-// ── Config ──
-const EMAIL = "qws941@kakao.com";
-const PASSWORD = "+4ng_YN7:8'46DM5e3&j|KqK2ap|8y=-";
+
+const EMAIL = process.env.PORTSWIGGER_EMAIL;
+const PASSWORD = process.env.PORTSWIGGER_PASSWORD;
+if (!EMAIL || !PASSWORD) { console.error("Set PORTSWIGGER_EMAIL and PORTSWIGGER_PASSWORD env vars"); process.exit(1); }
 const args = process.argv.slice(2);
 const topicFilter = args.includes("--topic") ? args[args.indexOf("--topic") + 1] : null;
 const diffFilter = args.includes("--difficulty") ? args[args.indexOf("--difficulty") + 1]?.toUpperCase() : null;

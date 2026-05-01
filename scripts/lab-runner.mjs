@@ -15,11 +15,12 @@ import { execSync, exec } from "child_process";
 import { readdirSync, existsSync } from "fs";
 import { resolve } from "path";
 
-const EMAIL = "qws941@kakao.com";
-const PASSWORD = "+4ng_YN7:8'46DM5e3&j|KqK2ap|8y=-";
+const EMAIL = process.env.PORTSWIGGER_EMAIL;
+const PASSWORD = process.env.PORTSWIGGER_PASSWORD;
+if (!EMAIL || !PASSWORD) { console.error("Set PORTSWIGGER_EMAIL and PORTSWIGGER_PASSWORD env vars"); process.exit(1); }
 const SOLVER_DIR = "/tmp/wsa-solutions";
-const DELAY_BETWEEN_LABS = 10000; // 10s between labs
-const LAB_SPAWN_WAIT = 18000; // 18s for lab to spawn
+const DELAY_BETWEEN_LABS = 15000; // 15s between labs
+const LAB_SPAWN_WAIT = 45000; // 45s for lab to spawn
 
 const args = process.argv.slice(2);
 const topicFilter = args.includes("--topic") ? args[args.indexOf("--topic") + 1] : null;
@@ -146,11 +147,23 @@ async function main() {
   }
 
   let solved = 0, failed = 0, skipped = 0;
+  // Skip labs needing Burp Collaborator or brute-force
+  const skipPatterns = ['Blind SQL', 'brute-force', 'out-of-band', 'steal cookies', 'capture passwords', 'dangling markup', 'request smuggling', 'HTTP request smuggling', 'desync', 'pause-based', 'request tunnelling'];
+  const skipSolvers = new Set(['XSS/exploit-lab22.py','XSS/exploit-lab23.py','XSS/exploit-lab29.py','OSCommandInjection/exploit-lab04.py','OSCommandInjection/exploit-lab05.py','SSRF/exploit-lab06.py','SQLInjection/exploit-lab17.py']);
+  const skipTopics = new Set(['request-smuggling']);
+  const skipSlow = !args.includes('--include-slow');
   for (const lab of solvable) {
     if (solved + failed >= maxLabs) break;
     const labNum = lab.labNum;
     console.log(`\n[${lab.difficulty}] ${lab.topic}#${labNum}: ${lab.title}`);
     console.log(`  Solver: ${lab.solverDir}/${lab.scriptName}`);
+
+    const solverKey = `${lab.solverDir}/${lab.scriptName}`;
+    if (skipSlow && (skipPatterns.some(p => lab.title.includes(p)) || skipSolvers.has(solverKey) || skipTopics.has(lab.topic))) {
+      console.log('  ⏭ Skipping (needs Collaborator or slow)');
+      skipped++;
+      continue;
+    }
 
     try {
       // Launch lab
@@ -173,6 +186,26 @@ async function main() {
       const base = new URL(labUrl).origin;
       console.log(`  Lab URL: ${base}`);
 
+      // Health check: wait until lab is actually accessible via direct page load
+      let labReady = false;
+      for (let hc = 0; hc < 20; hc++) {
+        try {
+          const testPage = await page.context().newPage();
+          const resp = await testPage.goto(base, { waitUntil: 'domcontentloaded', timeout: 10000 });
+          const status = resp?.status() || 0;
+          await testPage.close();
+          if (status >= 200 && status < 500) { labReady = true; break; }
+        } catch {}
+        await page.waitForTimeout(3000);
+        if (hc > 0 && hc % 5 === 0) console.log(`    Waiting for lab to be ready... (${hc * 3}s)`);
+      }
+      if (!labReady) {
+        console.log("  \u274c Lab not accessible after 60s");
+        failed++;
+        continue;
+      }
+      console.log("  Lab is ready")
+
       // Run Python solver (no proxy)
       try {
         // Add default args for solvers that need extra params
@@ -181,7 +214,7 @@ async function main() {
         if (lab.solverDir === "OSCommandInjection" && lab.labNum >= 3) extraArgs = ' -C whoami';
         const output = execSync(
           `cd "${resolve(SOLVER_DIR, lab.solverDir)}" && python3 ${lab.scriptName} -U "${base}"${extraArgs} 2>&1 || true`,
-          { timeout: 1200000, maxBuffer: 2 * 1024 * 1024 }
+          { timeout: 180000, maxBuffer: 4 * 1024 * 1024 } // 3 min timeout per solver
         ).toString();
         
         const lastLines = output.split("\n").slice(-10).join("\n");

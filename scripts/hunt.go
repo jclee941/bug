@@ -2,14 +2,17 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,12 +34,24 @@ var huntTypes = []huntType{
 	{"cve", "cve", "Known CVEs", "high,critical"},
 	{"takeover", "takeover", "Subdomain Takeover", "high,critical"},
 	{"token", "token,api-key,secret", "Exposed Tokens & API Keys", "medium,high,critical"},
+	{"ssti", "ssti", "Server-Side Template Injection", "medium,high,critical"},
+	{"lfi", "lfi,file-inclusion", "Local File Inclusion", "medium,high,critical"},
+	{"redirect", "redirect,open-redirect", "Open Redirect", "low,medium"},
+	{"cors", "cors,misconfiguration", "CORS Misconfiguration", "medium,high"},
+	{"graphql", "graphql", "GraphQL Vulnerabilities", "medium,high,critical"},
+	{"prototype", "prototype-pollution", "Prototype Pollution", "medium,high,critical"},
+	{"cache", "cache-poisoning,cache-deception", "Cache Poisoning/Deception", "medium,high,critical"},
+	{"race", "race-condition", "Race Condition", "medium,high"},
 }
 
 func main() {
+	signalCtx, cancel := SetupSignalContext()
+	defer cancel()
+
 	domain := flag.String("d", "", "Target domain (required)")
 	reconDir := flag.String("recon-dir", "", "Path to existing recon results (auto-detect if empty)")
-	vulnType := flag.String("type", "all", "Vulnerability type to hunt (idor,ssrf,auth,exposure,xss,sqli,rce,cve,takeover,token,all)")
+	vulnType := flag.String("type", "all", "Vulnerability type to hunt (idor,ssrf,auth,exposure,xss,sqli,rce,cve,takeover,token,ssti,lfi,redirect,cors,graphql,prototype,cache,race,all)")
+	useConfig := flag.Bool("config", false, "Read target from config/targets.json")
 	listTypes := flag.Bool("list", false, "List available hunt types")
 	flag.Parse()
 
@@ -45,20 +60,52 @@ func main() {
 		return
 	}
 
-	if *domain == "" {
-		fmt.Fprintln(os.Stderr, "Usage: go run hunt.go -d <domain> [-type idor] [-recon-dir path/]")
+	resolvedDomain := *domain
+	resolvedRateLimit := 100
+	configuredSeverity := ""
+
+	if *useConfig {
+		cfg, err := loadConfig(filepath.Join("config", "targets.json"))
+		if err != nil {
+			logFatal("Failed to load config: %v", err)
+		}
+
+		activeTarget := cfg.ActiveTarget()
+		if activeTarget == nil {
+			logFatal("No active target found in config/targets.json")
+		}
+
+		if resolvedDomain == "" {
+			resolvedDomain = activeTarget.Domain
+		}
+		switch {
+		case activeTarget.Severity != "":
+			configuredSeverity = activeTarget.Severity
+		case cfg.Defaults.Severity != "":
+			configuredSeverity = cfg.Defaults.Severity
+		}
+		switch {
+		case activeTarget.RateLimit > 0:
+			resolvedRateLimit = activeTarget.RateLimit
+		case cfg.Defaults.RateLimit > 0:
+			resolvedRateLimit = cfg.Defaults.RateLimit
+		}
+	}
+
+	if resolvedDomain == "" {
+		fmt.Fprintln(os.Stderr, "Usage: go run hunt.go lib.go -d <domain> [-type idor] [-recon-dir path/]")
 		fmt.Fprintln(os.Stderr, "\nFlags:")
 		flag.PrintDefaults()
-		fmt.Fprintln(os.Stderr, "\nTypes: idor, ssrf, auth, exposure, xss, sqli, rce, cve, takeover, token, all")
+		fmt.Fprintln(os.Stderr, "\nTypes: idor, ssrf, auth, exposure, xss, sqli, rce, cve, takeover, token, ssti, lfi, redirect, cors, graphql, prototype, cache, race, all")
 		os.Exit(1)
 	}
 
 	// Find recon directory
 	rd := *reconDir
 	if rd == "" {
-		rd = findLatestRecon(*domain)
+		rd = findLatestRecon(resolvedDomain)
 		if rd == "" {
-			fatal("No recon results found for %s. Run recon first: go run scripts/recon.go -d %s", *domain, *domain)
+			logFatal("No recon results found for %s. Run recon first: go run scripts/recon.go -d %s", resolvedDomain, resolvedDomain)
 		}
 	}
 
@@ -66,7 +113,7 @@ func main() {
 	urlsFile := filepath.Join(rd, "urls-all.txt")
 
 	if _, err := os.Stat(liveFile); os.IsNotExist(err) {
-		fatal("live.txt not found in %s. Run recon first.", rd)
+		logFatal("live.txt not found in %s. Run recon first.", rd)
 	}
 
 	liveCount := countLines(liveFile)
@@ -75,7 +122,7 @@ func main() {
 	fmt.Println("  ┌─────────────────────────────────────┐")
 	fmt.Println("  │     Targeted Vulnerability Hunter    │")
 	fmt.Println("  └─────────────────────────────────────┘")
-	fmt.Printf("  Target:    %s\n", *domain)
+	fmt.Printf("  Target:    %s\n", resolvedDomain)
 	fmt.Printf("  Recon:     %s\n", rd)
 	fmt.Printf("  Live:      %d hosts\n", liveCount)
 	fmt.Printf("  Hunt type: %s\n", *vulnType)
@@ -83,33 +130,61 @@ func main() {
 
 	// Create hunt output directory
 	ts := time.Now().Format("20060102-150405")
-	huntDir := filepath.Join("recon", fmt.Sprintf("%s_hunt_%s", *domain, ts))
+	huntDir := filepath.Join("recon", fmt.Sprintf("%s_hunt_%s", resolvedDomain, ts))
 	os.MkdirAll(huntDir, 0o755)
 
 	// Phase 1: Nuclei targeted scans
-	info("[Phase 1] Nuclei Targeted Scans")
-	runNucleiHunts(liveFile, huntDir, *vulnType)
+	if signalCtx.Err() != nil {
+		logWarn("Interrupted — skipping remaining phases")
+		generateHuntSummary(huntDir, resolvedDomain)
+		return
+	}
+	logInfo("[Phase 1] Nuclei Targeted Scans")
+	stop := Progress("[Phase 1] Nuclei Targeted Scans")
+	runNucleiHunts(signalCtx, liveFile, huntDir, *vulnType, configuredSeverity, resolvedRateLimit)
+	stop()
 
 	// Phase 2: API endpoint discovery
-	info("[Phase 2] API Endpoint Discovery")
-	discoverAPIs(liveFile, urlsFile, huntDir, *domain)
+	if signalCtx.Err() != nil {
+		logWarn("Interrupted — skipping remaining phases")
+		generateHuntSummary(huntDir, resolvedDomain)
+		return
+	}
+	logInfo("[Phase 2] API Endpoint Discovery")
+	stop = Progress("[Phase 2] API Endpoint Discovery")
+	discoverAPIs(signalCtx, liveFile, urlsFile, huntDir, resolvedDomain)
+	stop()
 
 	// Phase 3: JS file analysis
-	info("[Phase 3] JavaScript Analysis")
-	analyzeJS(urlsFile, huntDir)
+	if signalCtx.Err() != nil {
+		logWarn("Interrupted — skipping remaining phases")
+		generateHuntSummary(huntDir, resolvedDomain)
+		return
+	}
+	logInfo("[Phase 3] JavaScript Analysis")
+	stop = Progress("[Phase 3] JavaScript Analysis")
+	analyzeJS(signalCtx, urlsFile, huntDir)
+	stop()
 
 	// Phase 4: Exposure detection
-	info("[Phase 4] Sensitive File Probing")
-	probeExposures(liveFile, huntDir)
+	if signalCtx.Err() != nil {
+		logWarn("Interrupted — skipping remaining phases")
+		generateHuntSummary(huntDir, resolvedDomain)
+		return
+	}
+	logInfo("[Phase 4] Sensitive File Probing")
+	stop = Progress("[Phase 4] Sensitive File Probing")
+	probeExposures(signalCtx, liveFile, huntDir)
+	stop()
 
 	// Summary
-	info("[Summary]")
-	generateHuntSummary(huntDir, *domain)
+	logInfo("[Summary]")
+	generateHuntSummary(huntDir, resolvedDomain)
 }
 
 // --- Phase 1: Nuclei targeted scans ---
 
-func runNucleiHunts(liveFile, huntDir, vulnType string) {
+func runNucleiHunts(ctx context.Context, liveFile, huntDir, vulnType, severityFilter string, rateLimit int) {
 	var selected []huntType
 
 	if vulnType == "all" {
@@ -125,21 +200,30 @@ func runNucleiHunts(liveFile, huntDir, vulnType string) {
 	}
 
 	if len(selected) == 0 {
-		warn("  No valid hunt types selected. Use -list to see options.")
+		logWarn("  No valid hunt types selected. Use -list to see options.")
 		return
 	}
 
 	totalFindings := 0
 	for _, ht := range selected {
-		outFile := filepath.Join(huntDir, fmt.Sprintf("nuclei-%s.txt", ht.Name))
-		info("  Scanning: %s (%s)", ht.Name, ht.Desc)
+		if ctx.Err() != nil {
+			logWarn("  Interrupted — saved partial Nuclei results")
+			return
+		}
 
-		cmd := exec.Command("nuclei",
+		outFile := filepath.Join(huntDir, fmt.Sprintf("nuclei-%s.txt", ht.Name))
+		logInfo("  Scanning: %s (%s)", ht.Name, ht.Desc)
+		severity := ht.Severity
+		if severityFilter != "" {
+			severity = intersectSeverityFilters(ht.Severity, severityFilter)
+		}
+
+		cmd := exec.CommandContext(ctx, "nuclei",
 			"-l", liveFile,
 			"-tags", ht.Tags,
-			"-severity", ht.Severity,
+			"-severity", severity,
 			"-silent",
-			"-rate-limit", "100",
+			"-rate-limit", fmt.Sprintf("%d", rateLimit),
 			"-o", outFile,
 		)
 		cmd.Stderr = os.Stderr
@@ -147,7 +231,7 @@ func runNucleiHunts(liveFile, huntDir, vulnType string) {
 
 		count := countLines(outFile)
 		if count > 0 {
-			success("    🎯 %d findings for %s", count, ht.Name)
+			logSuccess("    🎯 %d findings for %s", count, ht.Name)
 			totalFindings += count
 		} else {
 			os.Remove(outFile) // clean up empty files
@@ -155,15 +239,43 @@ func runNucleiHunts(liveFile, huntDir, vulnType string) {
 	}
 
 	if totalFindings > 0 {
-		success("  Total Nuclei findings: %d", totalFindings)
+		logSuccess("  Total Nuclei findings: %d", totalFindings)
 	} else {
-		info("  No Nuclei findings (this is normal — manual testing recommended)")
+		logInfo("  No Nuclei findings (this is normal — manual testing recommended)")
 	}
+}
+
+func intersectSeverityFilters(base, override string) string {
+	if override == "" {
+		return base
+	}
+
+	allowed := make(map[string]bool)
+	for _, level := range strings.Split(override, ",") {
+		level = strings.TrimSpace(level)
+		if level != "" {
+			allowed[level] = true
+		}
+	}
+
+	var result []string
+	for _, level := range strings.Split(base, ",") {
+		level = strings.TrimSpace(level)
+		if level != "" && allowed[level] {
+			result = append(result, level)
+		}
+	}
+
+	if len(result) == 0 {
+		return base
+	}
+
+	return strings.Join(result, ",")
 }
 
 // --- Phase 2: API endpoint discovery ---
 
-func discoverAPIs(liveFile, urlsFile, huntDir, domain string) {
+func discoverAPIs(ctx context.Context, liveFile, urlsFile, huntDir, domain string) {
 	apiFile := filepath.Join(huntDir, "api-endpoints.txt")
 	swaggerFile := filepath.Join(huntDir, "swagger-found.txt")
 
@@ -175,6 +287,13 @@ func discoverAPIs(liveFile, urlsFile, huntDir, domain string) {
 		seen := make(map[string]bool)
 
 		for _, u := range urls {
+			if ctx.Err() != nil {
+				if len(apiURLs) > 0 {
+					writeLines(apiFile, apiURLs)
+				}
+				logWarn("  Interrupted — saved partial API endpoint results")
+				return
+			}
 			if apiPattern.MatchString(u) && !seen[u] {
 				seen[u] = true
 				apiURLs = append(apiURLs, u)
@@ -183,7 +302,7 @@ func discoverAPIs(liveFile, urlsFile, huntDir, domain string) {
 
 		if len(apiURLs) > 0 {
 			writeLines(apiFile, apiURLs)
-			success("  Found %d API endpoints", len(apiURLs))
+			logSuccess("  Found %d API endpoints", len(apiURLs))
 		}
 	}
 
@@ -197,34 +316,122 @@ func discoverAPIs(liveFile, urlsFile, huntDir, domain string) {
 
 	var found []string
 	client := &http.Client{Timeout: 5 * time.Second}
+	sem := make(chan struct{}, 10)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
 	for _, host := range hosts {
+		if ctx.Err() != nil {
+			if len(found) > 0 {
+				writeLines(swaggerFile, found)
+			}
+			logWarn("  Interrupted — saved partial Swagger/OpenAPI results")
+			return
+		}
 		for _, path := range specPaths {
+			if ctx.Err() != nil {
+				if len(found) > 0 {
+					writeLines(swaggerFile, found)
+				}
+				logWarn("  Interrupted — saved partial Swagger/OpenAPI results")
+				return
+			}
 			url := strings.TrimRight(host, "/") + path
-			resp, err := client.Head(url)
-			if err != nil {
-				continue
-			}
-			resp.Body.Close()
-			if resp.StatusCode == 200 {
-				found = append(found, url)
-				success("    📋 Swagger/OpenAPI: %s", url)
-			}
+			sem <- struct{}{}
+			wg.Add(1)
+			go func(url string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				if ctx.Err() != nil {
+					return
+				}
+
+				req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+				if err != nil {
+					return
+				}
+				resp, err := client.Do(req)
+				if err != nil {
+					return
+				}
+				resp.Body.Close()
+				if resp.StatusCode == 200 {
+					mu.Lock()
+					found = append(found, url)
+					mu.Unlock()
+					logSuccess("    📋 Swagger/OpenAPI: %s", url)
+				}
+			}(url)
 		}
 	}
+
+	// Probe for GraphQL introspection
+	graphqlPaths := []string{"/graphql", "/api/graphql", "/graphql/v1", "/gql"}
+	limit := len(hosts)
+	if limit > 50 {
+		limit = 50
+	}
+	for _, host := range hosts[:limit] {
+		if ctx.Err() != nil {
+			if len(found) > 0 {
+				writeLines(swaggerFile, found)
+			}
+			logWarn("  Interrupted — saved partial Swagger/OpenAPI results")
+			return
+		}
+		for _, gpath := range graphqlPaths {
+			if ctx.Err() != nil {
+				if len(found) > 0 {
+					writeLines(swaggerFile, found)
+				}
+				logWarn("  Interrupted — saved partial Swagger/OpenAPI results")
+				return
+			}
+			url := strings.TrimRight(host, "/") + gpath
+			sem <- struct{}{}
+			wg.Add(1)
+			go func(url string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				if ctx.Err() != nil {
+					return
+				}
+
+				body := strings.NewReader(`{"query":"{ __schema { types { name } } }"}`)
+				req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+				if err != nil {
+					return
+				}
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := client.Do(req)
+				if err != nil {
+					return
+				}
+				respBody, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode == 200 && strings.Contains(string(respBody), "__schema") {
+					mu.Lock()
+					found = append(found, url+" [GraphQL introspection ENABLED]")
+					mu.Unlock()
+					logSuccess("    📊 GraphQL introspection: %s", url)
+				}
+			}(url)
+		}
+	}
+	wg.Wait()
 
 	if len(found) > 0 {
 		writeLines(swaggerFile, found)
 	} else {
-		info("  No Swagger/OpenAPI specs found")
+		logInfo("  No Swagger/OpenAPI specs found")
 	}
 }
 
 // --- Phase 3: JS analysis ---
 
-func analyzeJS(urlsFile, huntDir string) {
+func analyzeJS(ctx context.Context, urlsFile, huntDir string) {
 	if _, err := os.Stat(urlsFile); os.IsNotExist(err) {
-		info("  Skipping — no URLs file")
+		logInfo("  Skipping — no URLs file")
 		return
 	}
 
@@ -238,11 +445,11 @@ func analyzeJS(urlsFile, huntDir string) {
 	}
 
 	if len(jsURLs) == 0 {
-		info("  No JavaScript files found in URLs")
+		logInfo("  No JavaScript files found in URLs")
 		return
 	}
 
-	info("  Analyzing %d JS files for secrets and endpoints...", len(jsURLs))
+	logInfo("  Analyzing %d JS files for secrets and endpoints...", len(jsURLs))
 
 	secretPatterns := []struct {
 		name    string
@@ -255,6 +462,14 @@ func analyzeJS(urlsFile, huntDir string) {
 		{"Private Key", regexp.MustCompile(`-----BEGIN (RSA |EC )?PRIVATE KEY-----`)},
 		{"Bearer Token", regexp.MustCompile(`[Bb]earer\s+[A-Za-z0-9\-_.~+/]+=*`)},
 		{"Generic Secret", regexp.MustCompile(`(?i)(api[_-]?key|api[_-]?secret|password|token|secret[_-]?key)\s*[:=]\s*['"][A-Za-z0-9+/=\-_.]{8,}['"]`)},
+		{"GitHub Token", regexp.MustCompile(`ghp_[A-Za-z0-9_]{36}|gho_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]{82}`)},
+		{"Stripe Key", regexp.MustCompile(`sk_live_[0-9a-zA-Z]{24,}`)},
+		{"Twilio", regexp.MustCompile(`SK[0-9a-fA-F]{32}`)},
+		{"SendGrid", regexp.MustCompile(`SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}`)},
+		{"Firebase", regexp.MustCompile(`AAAA[A-Za-z0-9_-]{7}:[A-Za-z0-9_-]{140}`)},
+		{"Mailgun", regexp.MustCompile(`key-[0-9a-zA-Z]{32}`)},
+		{"Heroku", regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)},
+		{"Base64 Creds", regexp.MustCompile(`(?i)(basic\s+)[A-Za-z0-9+/]{20,}={0,2}`)},
 	}
 
 	apiExtractPattern := regexp.MustCompile(`['"/](api/[a-zA-Z0-9/_\-{}]+)['"]`)
@@ -265,6 +480,9 @@ func analyzeJS(urlsFile, huntDir string) {
 	var secrets []string
 	apiEndpoints := make(map[string]bool)
 	client := &http.Client{Timeout: 10 * time.Second}
+	sem := make(chan struct{}, 5)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
 	limit := len(jsURLs)
 	if limit > 100 {
@@ -272,49 +490,91 @@ func analyzeJS(urlsFile, huntDir string) {
 	}
 
 	for _, jsURL := range jsURLs[:limit] {
-		resp, err := client.Get(jsURL)
-		if err != nil {
-			continue
+		if ctx.Err() != nil {
+			break
 		}
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(jsURL string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if ctx.Err() != nil {
+				return
+			}
 
-		scanner := bufio.NewScanner(resp.Body)
-		buf := make([]byte, 0, 256*1024)
-		scanner.Buffer(buf, 1024*1024)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, jsURL, nil)
+			if err != nil {
+				return
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return
+			}
+			defer resp.Body.Close()
 
-		lineNum := 0
-		for scanner.Scan() {
-			lineNum++
-			line := scanner.Text()
+			scanner := bufio.NewScanner(resp.Body)
+			buf := make([]byte, 0, 256*1024)
+			scanner.Buffer(buf, 1024*1024)
 
-			// Check secrets
-			for _, sp := range secretPatterns {
-				if sp.pattern.MatchString(line) {
-					finding := fmt.Sprintf("[%s] %s (line %d): %s",
-						sp.name, jsURL, lineNum,
-						truncate(strings.TrimSpace(line), 200))
-					secrets = append(secrets, finding)
+			lineNum := 0
+			var localSecrets []string
+			localEndpoints := make(map[string]bool)
+			for scanner.Scan() {
+				if ctx.Err() != nil {
+					return
+				}
+				lineNum++
+				line := scanner.Text()
+
+				for _, sp := range secretPatterns {
+					if sp.pattern.MatchString(line) {
+						finding := fmt.Sprintf("[%s] %s (line %d): %s",
+							sp.name, jsURL, lineNum,
+							truncate(strings.TrimSpace(line), 200))
+						localSecrets = append(localSecrets, finding)
+					}
+				}
+
+				matches := apiExtractPattern.FindAllStringSubmatch(line, -1)
+				for _, m := range matches {
+					if len(m) > 1 {
+						localEndpoints["/"+m[1]] = true
+					}
 				}
 			}
 
-			// Extract API endpoints
-			matches := apiExtractPattern.FindAllStringSubmatch(line, -1)
-			for _, m := range matches {
-				if len(m) > 1 {
-					apiEndpoints["/"+m[1]] = true
-				}
+			mu.Lock()
+			secrets = append(secrets, localSecrets...)
+			for ep := range localEndpoints {
+				apiEndpoints[ep] = true
 			}
+			mu.Unlock()
+		}(jsURL)
+	}
+	wg.Wait()
+	if ctx.Err() != nil {
+		if len(secrets) > 0 {
+			writeLines(secretsFile, secrets)
 		}
-		resp.Body.Close()
+		if len(apiEndpoints) > 0 {
+			var apis []string
+			for ep := range apiEndpoints {
+				apis = append(apis, ep)
+			}
+			writeLines(jsApiFile, apis)
+		}
+		logWarn("  Interrupted — saved partial JavaScript analysis results")
+		return
 	}
 
 	if len(secrets) > 0 {
 		writeLines(secretsFile, secrets)
-		success("  🔑 %d potential secrets found!", len(secrets))
+		logSuccess("  🔑 %d potential secrets found!", len(secrets))
 		for _, s := range secrets {
 			fmt.Printf("    \033[31m%s\033[0m\n", truncate(s, 120))
 		}
 	} else {
-		info("  No secrets detected")
+		logInfo("  No secrets detected")
 	}
 
 	if len(apiEndpoints) > 0 {
@@ -323,13 +583,13 @@ func analyzeJS(urlsFile, huntDir string) {
 			apis = append(apis, ep)
 		}
 		writeLines(jsApiFile, apis)
-		success("  📡 %d API endpoints extracted from JS", len(apis))
+		logSuccess("  📡 %d API endpoints extracted from JS", len(apis))
 	}
 }
 
 // --- Phase 4: Exposure detection ---
 
-func probeExposures(liveFile, huntDir string) {
+func probeExposures(ctx context.Context, liveFile, huntDir string) {
 	hosts := loadLines(liveFile)
 	exposureFile := filepath.Join(huntDir, "exposures.txt")
 
@@ -341,6 +601,10 @@ func probeExposures(liveFile, huntDir string) {
 		"/sitemap.xml", "/.well-known/security.txt", "/debug",
 		"/actuator/health", "/actuator/env", "/graphql",
 		"/console", "/admin", "/_debug", "/trace",
+		"/api/v1/health", "/api/debug", "/metrics", "/prometheus",
+		"/.env.local", "/.env.production", "/.env.development",
+		"/wp-admin/", "/wp-login.php", "/administrator/",
+		"/api/v1/users", "/api/v1/admin", "/internal/",
 	}
 
 	client := &http.Client{
@@ -355,31 +619,64 @@ func probeExposures(liveFile, huntDir string) {
 	if limit > 50 {
 		limit = 50
 	}
+	sem := make(chan struct{}, 10)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
 	for _, host := range hosts[:limit] {
-		for _, path := range sensitivePaths {
-			url := strings.TrimRight(host, "/") + path
-			resp, err := client.Get(url)
-			if err != nil {
-				continue
-			}
-			resp.Body.Close()
-
-			if resp.StatusCode == 200 && resp.ContentLength > 0 {
-				finding := fmt.Sprintf("[%d] %s (%d bytes)", resp.StatusCode, url, resp.ContentLength)
-				findings = append(findings, finding)
-			}
+		if ctx.Err() != nil {
+			break
 		}
+		for _, path := range sensitivePaths {
+			if ctx.Err() != nil {
+				break
+			}
+			url := strings.TrimRight(host, "/") + path
+			sem <- struct{}{}
+			wg.Add(1)
+			go func(url string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				if ctx.Err() != nil {
+					return
+				}
+
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+				if err != nil {
+					return
+				}
+				resp, err := client.Do(req)
+				if err != nil {
+					return
+				}
+				resp.Body.Close()
+
+				if resp.StatusCode == 200 && resp.ContentLength > 0 {
+					finding := fmt.Sprintf("[%d] %s (%d bytes)", resp.StatusCode, url, resp.ContentLength)
+					mu.Lock()
+					findings = append(findings, finding)
+					mu.Unlock()
+				}
+			}(url)
+		}
+	}
+	wg.Wait()
+	if ctx.Err() != nil {
+		if len(findings) > 0 {
+			writeLines(exposureFile, findings)
+		}
+		logWarn("  Interrupted — saved partial exposure results")
+		return
 	}
 
 	if len(findings) > 0 {
 		writeLines(exposureFile, findings)
-		success("  🔓 %d exposed files/endpoints found:", len(findings))
+		logSuccess("  🔓 %d exposed files/endpoints found:", len(findings))
 		for _, f := range findings {
 			fmt.Printf("    \033[33m%s\033[0m\n", f)
 		}
 	} else {
-		info("  No sensitive files exposed")
+		logInfo("  No sensitive files exposed")
 	}
 }
 
@@ -417,12 +714,12 @@ func generateHuntSummary(huntDir, domain string) {
 	sb.WriteString("5. Submit via HackerOne/Bugcrowd\n")
 
 	os.WriteFile(reportPath, []byte(sb.String()), 0o644)
-	info("Hunt summary: %s", reportPath)
+	logInfo("Hunt summary: %s", reportPath)
 
 	if totalFindings > 0 {
-		success("🎯 Total findings across all categories: %d", totalFindings)
+		logSuccess("🎯 Total findings across all categories: %d", totalFindings)
 	} else {
-		info("No automated findings. Manual testing with Burp Suite recommended.")
+		logInfo("No automated findings. Manual testing with Burp Suite recommended.")
 	}
 }
 
@@ -460,50 +757,4 @@ func categorize(filename string) string {
 	default:
 		return "Other"
 	}
-}
-
-func loadLines(path string) []string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var lines []string
-	for _, l := range strings.Split(string(data), "\n") {
-		l = strings.TrimSpace(l)
-		if l != "" {
-			lines = append(lines, l)
-		}
-	}
-	return lines
-}
-
-func writeLines(path string, lines []string) {
-	os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
-}
-
-func countLines(path string) int {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0
-	}
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return 0
-	}
-	return len(lines)
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}
-
-func info(f string, a ...any)    { fmt.Printf("\033[34m[*]\033[0m "+f+"\n", a...) }
-func success(f string, a ...any) { fmt.Printf("\033[32m[+]\033[0m "+f+"\n", a...) }
-func warn(f string, a ...any)    { fmt.Printf("\033[33m[!]\033[0m "+f+"\n", a...) }
-func fatal(f string, a ...any) {
-	fmt.Fprintf(os.Stderr, "\033[31m[-]\033[0m "+f+"\n", a...)
-	os.Exit(1)
 }
