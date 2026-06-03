@@ -29,300 +29,351 @@ The toolkit supports the full hunting workflow: `recon → monitoring → vulner
 
 **Bug Bounty Automation Toolkit**은 허가된 웹 보안 연구, 취약점 학습, 실습 랩 자동화를 위한 로컬 자동화 워크스페이스입니다. 다음 구성요소를 포함합니다:
 
-- **Node.js ESM 스크립트**: Playwright를 활용한 PortSwigger/Web Security Academy 스타일의 랩 자동화
+- **Node.js ESM 스크립트**: Playwright를 사용한 PortSwigger/Web Security Academy 스타일 랩 자동화
 - **Go 헬퍼 프로그램**: 모니터링 및 취약점 탐지 명령 오케스트레이션
-- **GitHub Actions 워크플로우** (총 30개): PR 검사, 보안 스캐닝, PR 리뷰 자동화, 이슈 관리, 릴리스 자동화, 문서 동기화, CI 자동 복구
-- **봇 사이드 헬퍼 스크립트**: README 생성, PR 리뷰 실행, 레포 리뷰, 시크릿 수정, 사설 IP 검사
+- **GitHub Actions 워크플로우** (총 30개): PR 检查, 보안 스캐닝, PR 리뷰 자동화, 이슈 관리, 릴리스 자동화, 문서 동기화, CI 자동 복구
+- **봇 사이드 헬퍼 스크립트**: README 생성, PR 리뷰 실행, 리포지토리 리뷰, 시크릿 삭제, 프라이빗 IP 체크
 
-툴킷은 전체 헌팅 워크플로우를 지원합니다: `재정찰 → 모니터링 → 취약점 탐지 → 리포팅`.
+본 툴킷은 전체 헌팅 워크플로우를 지원합니다: `recon → monitoring → vulnerability hunting → reporting`.
+
+> **⚠️ 경고**: 본 프로젝트는 허가된 테스트 전용으로 설계되었습니다. 소유하거나 명시적 허가를 받은 시스템이 아닌 경우 스캔, 랩 페이로드, 자동 브라우저 작업을 실행하지 마십시오.
 
 ---
 
-## Features / 주요 기능
-
-### English
+## Features / 기능
 
 | Category | Description |
 |----------|-------------|
-| **Reconnaissance** | Full recon pipeline with subdomain enumeration, port scanning, and service detection |
-| **Monitoring** | Diff-based change detection for subdomains and endpoints with Discord notifications |
-| **Vulnerability Hunting** | Targeted scanning for IDOR, SSRF, SQLi, XSS, and more |
-| **Lab Automation** | PortSwigger Web Security Academy lab solving with Playwright |
-| **GitHub Automation** | 30 workflows covering PR checks, security scanning, auto-merge, issue management, release automation, and CI healing |
-| **Bot Integration** | PR review automation via [pr-agent](https://qodo-ai/pr-agent), README auto-generation, secret redaction |
-
-### 한국어
-
-| 카테고리 | 설명 |
-|----------|------|
-| **정찰(Recon)** | 서브도메인 열거, 포트 스캐닝, 서비스 감지를 포함한 전체 재정찰 파이프라인 |
-| **모니터링** | Discord 알림과 함께 서브도메인 및 엔드포인트의 차등 기반 변경 감지 |
-| **취약점 헌팅** | IDOR, SSRF, SQLi, XSS 등 대상 스캐닝 |
-| **랩 자동화** | Playwright를 사용한 PortSwigger Web Security Academy 랩 해결 |
-| **GitHub 자동화** | PR 검사, 보안 스캐닝, 자동 병합, 이슈 관리, 릴리스 자동화, CI 복구를 다루는 30개의 워크플로우 |
-| **봇 통합** | pr-agent를 통한 PR 리뷰 자동화, README 자동 생성, 시크릿 수정 |
+| **Lab Automation** | PortSwigger Web Security Academy 랩 자동求解 (Playwright + Node.js ESM) |
+| **Recon Pipeline** | 5단계 서브도메인 열거 → 웹 크롤링 → nuclei 스캐닝 → 결과 통합 |
+| **Diff Monitoring** | crt.sh 기반 서브도메인 변경 감지 → Discord 알림 |
+| **Vulnerability Hunting** | IDOR, SSRF, SQLi, XSS, CSRF 등 카테고리별 탐지 |
+| **GitHub Automation** | 30개 워크플로우: PR checks, security scanning, auto-merge, issue management, CI healing |
+| **Bot Scripts** | README 생성, PR 리뷰 실행기, 리포지토리 리뷰, 시크릿 삭제, 프라이빗 IP 체크 |
+| **Self-Healing CI** | 실패한 CI 실행 자동 분석 및 재실행 |
 
 ---
 
 ## Architecture / 아키텍처
 
 ```mermaid
-flowchart TB
-    subgraph Local["Local Environment / 로컬 환경"]
-        subgraph GoScripts["Go Scripts / Go 스크립트"]
-            setup["setup.go<br/>Tool verification + wordlists"]
-            recon["recon.go<br/>5-phase recon pipeline"]
-            monitor["monitor.go<br/>Diff monitoring + alerts"]
-            hunt["hunt.go<br/>4-phase vulnerability hunting"]
-            lib["lib.go<br/>Shared helpers"]
+flowchart TD
+    subgraph Local["Local Environment"]
+        subgraph Scripts["Node.js / Go Scripts"]
+            lab-runner["lab-runner.mjs<br/>PortSwigger Lab Solver"]
+            lab-solver["lab-solver.mjs<br/>Custom Playwright Solvers"]
+            lab-gap["lab-gap-solver.mjs<br/>Gap Solver (1236L)"]
+            go-recon["recon.go<br/>5-phase recon"]
+            go-monitor["monitor.go<br/>Diff monitoring"]
+            go-hunt["hunt.go<br/>4-phase hunting"]
         end
+        lib["lib.go<br/>Shared helpers"]
+    end
 
-        subgraph NodeScripts["Node.js Scripts / Node.js 스크립트"]
-            labRunner["lab-runner.mjs<br/>Lab orchestration"]
-            labSolver["lab-solver.mjs<br/>Playwright solvers"]
-            labGapSolver["lab-gap-solver.mjs<br/>Gap-based solving"]
-            labBatch["lab-batch-*.mjs<br/>Batch lab runners"]
+    subgraph GitHub["GitHub Actions (30 workflows)"]
+        subgraph PR["PR Automation"]
+            branch-pr["01_branch-to-pr.yml"]
+            pr-checks["03_pr-checks.yml<br/>44_reusable-pr-checks.yml"]
+            pr-review["10_pr-review.yml<br/>security/11_pr-review.yml"]
+            semantic-pr["09_semantic-pr.yml"]
+            auto-merge["13_pr-auto-merge.yml<br/>12_dependabot-auto-merge.yml"]
+            bot-fix["14_bot-auto-fix.yml"]
+            cleanup["15_merged-pr-cleanup.yml"]
+        end
+        subgraph Security["Security Scanning"]
+            actionlint["04_actionlint.yml"]
+            gitleaks["05_gitleaks.yml<br/>45_reusable-gitleaks.yml"]
+            codeql["06_codeql.yml"]
+            dep-review["07_dependency-review.yml"]
+            scorecard["08_scorecard.yml"]
+        end
+        subgraph Issues["Issue Management"]
+            issue-branch["02_issue-to-branch.yml"]
+            issue-mgmt["18_issue-management.yml<br/>43_reusable-issue-management.yml"]
+            issue-backfill["19_issue-backfill.yml"]
+            issue-class["91_issue-classification.yml"]
+            ci-failure["37_ci-failure-issues.yml"]
+        end
+        subgraph Docs["Docs & Release"]
+            readme-gen["20_readme-gen.yml"]
+            docs-sync["21_docs-sync.yml<br/>42_reusable-docs-sync.yml"]
+            release-notes["24_release-notes.yml"]
+            release-pub["25_release-publish.yml"]
+        end
+        subgraph Health["Health & CI"]
+            downstream["29_downstream-health-check.yml"]
+            ci-heal["60_ci-auto-heal.yml"]
         end
     end
 
-    subgraph GitHub["GitHub Repository / GitHub 레포"]
-        subgraph Workflows["30 Workflows / 30개 워크플로우"]
-            PRFlow["PR Automation<br/>10_pr-review.yml<br/>12_dependabot-auto-merge.yml<br/>13_pr-auto-merge.yml<br/>14_bot-auto-fix.yml<br/>15_merged-pr-cleanup.yml"]
-            IssueFlow["Issue Management<br/>18_issue-management.yml<br/>19_issue-backfill.yml<br/>91_issue-classification.yml"]
-            SecurityFlow["Security Scanning<br/>03_pr-checks.yml<br/>05_gitleaks.yml<br/>06_codeql.yml<br/>07_dependency-review.yml<br/>08_scorecard.yml"]
-            ReleaseFlow["Release Automation<br/>24_release-notes.yml<br/>25_release-publish.yml"]
-            DocsFlow["Documentation<br/>20_readme-gen.yml<br/>21_docs-sync.yml<br/>42_reusable-docs-sync.yml"]
-            HealthFlow["CI Health<br/>29_downstream-health-check.yml<br/>37_ci-failure-issues.yml<br/>60_ci-auto-heal.yml"]
-            OtherFlow["Other<br/>01_branch-to-pr.yml<br/>02_issue-to-branch.yml<br/>04_actionlint.yml<br/>09_semantic-pr.yml<br/>44_reusable-pr-checks.yml<br/>45_reusable-gitleaks.yml<br/>ci.yml<br/>security/11_pr-review.yml"]
-        end
-
-        subgraph BotScripts["Bot Scripts / 봇 스크립트"]
-            generateReadme["generate_readme.py<br/>README auto-generation"]
-            prReviewRunner["pr_review_runner.py<br/>PR review execution"]
-            repoReview["repo_review.py<br/>Repository review"]
-            redactSecrets["redact_exposed_secrets.py<br/>Secret redaction"]
-            checkPrivateIPs["check_private_ips.py<br/>Private IP detection"]
-            checkWorkflowScripts["check_workflow_scripts.py<br/>Workflow validation"]
-        end
+    subgraph Bot["Bot Side (_bot-scripts/)"]
+        readme-gen-bot["scripts/generate_readme.py"]
+        pr-review-runner["scripts/pr_review_runner.py"]
+        repo-review["scripts/repo_review.py"]
+        redact["scripts/redact_exposed_secrets.py"]
+        private-ip["scripts/check_private_ips.py"]
+        workflow-scripts["scripts/check_workflow_scripts.py"]
     end
 
-    subgraph External["External Services / 외부 서비스"]
-        CLIProxy["CLIProxy API<br/>&lt;cliproxy.jclee.me&gt;"]
-        PortSwigger["PortSwigger<br/>Web Security Academy"]
-        crtSh["crt.sh<br/>Certificate transparency"]
-        Discord["Discord<br/>Notifications"]
-    end
+    Local -->|push / PR| GitHub
+    GitHub -->|trigger| Bot
+    Bot -->|comment / label| GitHub
 
-    Local --> GitHub
-    GitHub --> External
-
-    setup --> recon
-    recon --> monitor
-    monitor --> hunt
-    lib --> setup
-    lib --> recon
-    lib --> monitor
-    lib --> hunt
-
-    labRunner --> labSolver
-    labRunner --> labGapSolver
-    labBatch --> labRunner
-    labRunner --> PortSwigger
-
-    monitor --> crtSh
-    monitor --> Discord
-
-    prReviewRunner --> CLIProxy
-    generateReadme --> CLIProxy
+    lab-runner -->|playwright| PortSwigger["PortSwigger Labs"]
+    go-recon -->|subfinder nuclei| targets["config/targets.json"]
+    go-monitor -->|crt.sh| Discord["Discord Webhook"]
 ```
 
 ---
 
-## Automation Inventory / 자동화 목록
+## Repository Structure / 리포지토리 구조
+
+```
+.
+├── Makefile                      # Orchestration (make help for commands)
+├── package.json                  # Node.js ESM deps (Playwright)
+├── AGENTS.md                     # AI agents knowledge base
+├── CONTRIBUTING.md               # Contribution guidelines
+├── LICENSE                       # ISC License
+├── README.md                     # This file
+├── interactsh_payload.txt        # OOB testing payload
+├── output-lab08.png              # Lab screenshot
+├── config/
+│   └── targets.json              # Target & notification configuration
+├── scripts/
+│   ├── lab-runner.mjs            # PortSwigger lab solver (262L)
+│   ├── lab-solver.mjs            # Custom Playwright solvers (559L)
+│   ├── lab-gap-solver.mjs        # Gap solver for labs without scripts (1236L)
+│   ├── lab-batch-*.mjs          # Batch lab solvers (fast, slow, OOB, smuggling)
+│   ├── lab-runner-*.mjs          # Runner variants (aggressive, standard)
+│   ├── lib.go                    # Shared Go helpers
+│   ├── hunt.go                   # 4-phase vulnerability hunting (464L)
+│   ├── monitor.go                # Diff monitoring + Discord alerts (254L)
+│   ├── recon.go                  # 5-phase recon pipeline (282L)
+│   ├── setup.go                  # Tool verification + wordlists
+│   ├── auth-solver.cjs           # Auth-focused solvers
+│   ├── batch-*.cjs               # Various batch solvers
+│   ├── diagnose-*.cjs            # Diagnostic scripts
+│   ├── get-lab-urls.*           # Lab URL fetchers
+│   ├── extract-labs.cjs          # Lab extractor
+│   └── interactsh-wrapper.sh     # OOB testing wrapper
+├── _bot-scripts/                 # (CI transient checkout path)
+│   ├── README.md
+│   ├── requirements.txt
+│   ├── requirements-dev.txt
+│   ├── setup.py
+│   ├── pyproject.toml
+│   ├── Dockerfile.github_action
+│   ├── Dockerfile.github_app
+│   ├── docker-compose.github_app.yml
+│   ├── scripts/
+│   │   ├── generate_readme.py    # README generator
+│   │   ├── pr_review_runner.py   # PR review executor
+│   │   ├── repo_review.py        # Repository reviewer
+│   │   ├── redact_exposed_secrets.py
+│   │   ├── check_private_ips.py
+│   │   ├── check_workflow_scripts.py
+│   │   ├── issue_classification_workflow_test.py
+│   │   └── *.test.py             # Test files
+│   └── notes/
+│       ├── phase2-checklist.md
+│       ├── report-template.md
+│       └── vulnerability-study.md
+├── .github/
+│   └── workflows/
+│       ├── 01_branch-to-pr.yml
+│       ├── 02_issue-to-branch.yml
+│       ├── 03_pr-checks.yml
+│       ├── 04_actionlint.yml
+│       ├── 05_gitleaks.yml
+│       ├── 06_codeql.yml
+│       ├── 07_dependency-review.yml
+│       ├── 08_scorecard.yml
+│       ├── 09_semantic-pr.yml
+│       ├── 10_pr-review.yml
+│       ├── 12_dependabot-auto-merge.yml
+│       ├── 13_pr-auto-merge.yml
+│       ├── 14_bot-auto-fix.yml
+│       ├── 15_merged-pr-cleanup.yml
+│       ├── 18_issue-management.yml
+│       ├── 19_issue-backfill.yml
+│       ├── 20_readme-gen.yml
+│       ├── 21_docs-sync.yml
+│       ├── 24_release-notes.yml
+│       ├── 25_release-publish.yml
+│       ├── 29_downstream-health-check.yml
+│       ├── 37_ci-failure-issues.yml
+│       ├── 42_reusable-docs-sync.yml
+│       ├── 43_reusable-issue-management.yml
+│       ├── 44_reusable-pr-checks.yml
+│       ├── 45_reusable-gitleaks.yml
+│       ├── 60_ci-auto-heal.yml
+│       ├── 91_issue-classification.yml
+│       ├── ci.yml
+│       └── security/
+│           └── 11_pr-review.yml
+├── notes/                        # (gitignored in real repo)
+│   ├── phase2-checklist.md
+│   ├── report-template.md
+│   └── vulnerability-study.md
+├── wordlists/                    # SecLists (gitignored)
+├── targets/                      # Target baselines (gitignored)
+├── recon/                       # Scan results (gitignored)
+└── reports/                     # Submitted reports (gitignored)
+```
+
+---
+
+## Automation Inventory / 자동화 인벤토리
 
 ### GitHub Actions Workflows (30 total)
 
 | File | Purpose |
 |------|---------|
-| `01_branch-to-pr.yml` | Auto-create PR from branch |
-| `02_issue-to-branch.yml` | Create branch from issue |
-| `03_pr-checks.yml` | PR validation checks |
-| `04_actionlint.yml` | Workflow linting |
-| `05_gitleaks.yml` | Secret scanning |
-| `06_codeql.yml` | CodeQL security analysis |
+| `01_branch-to-pr.yml` | Convert branch to PR with auto-labeling |
+| `02_issue-to-branch.yml` | Create branch from issue for contribution |
+| `03_pr-checks.yml` | Reusable PR validation (lint, test, build) |
+| `04_actionlint.yml` | GitHub Actions workflow linting |
+| `05_gitleaks.yml` | Secret scanning in commits/PRs |
+| `06_codeql.yml` | CodeQL static analysis |
 | `07_dependency-review.yml` | Dependency vulnerability review |
-| `08_scorecard.yml` | OpenSSF Scorecard assessment |
-| `09_semantic-pr.yml` | Semantic PR title validation |
-| `10_pr-review.yml` | PR review automation (reusable) |
+| `08_scorecard.yml` | OpenSSF Scorecard security assessment |
+| `09_semantic-pr.yml` | Enforce semantic PR title format |
+| `10_pr-review.yml` | Bot PR review (external: qodo-ai/pr-agent) |
+| `security/11_pr-review.yml` | Security-focused PR review |
 | `12_dependabot-auto-merge.yml` | Auto-merge Dependabot PRs |
-| `13_pr-auto-merge.yml` | Auto-merge eligible PRs |
-| `14_bot-auto-fix.yml` | Bot-triggered auto-fixes |
-| `15_merged-pr-cleanup.yml` | Post-merge cleanup |
-| `18_issue-management.yml` | Issue lifecycle management (reusable) |
-| `19_issue-backfill.yml` | Issue content backfill |
-| `20_readme-gen.yml` | README auto-generation |
-| `21_docs-sync.yml` | Documentation sync |
-| `24_release-notes.yml` | Release notes generation |
-| `25_release-publish.yml` | Release publication |
-| `29_downstream-health-check.yml` | Downstream repository health |
-| `37_ci-failure-issues.yml` | CI failure issue creation |
+| `13_pr-auto-merge.yml` | Auto-merge on CI pass + approval |
+| `14_bot-auto-fix.yml` | Apply bot-generated fixes |
+| `15_merged-pr-cleanup.yml` | Post-merge cleanup (branch deletion) |
+| `18_issue-management.yml` | Issue lifecycle automation |
+| `19_issue-backfill.yml` | Backfill issues from commits |
+| `20_readme-gen.yml` | Auto-regenerate README on structure change |
+| `21_docs-sync.yml` | Sync documentation across repos |
+| `24_release-notes.yml` | Generate release notes from changelog |
+| `25_release-publish.yml` | Publish release artifacts |
+| `29_downstream-health-check.yml` | Monitor downstream repo health |
+| `37_ci-failure-issues.yml` | Create issue on CI failure |
 | `42_reusable-docs-sync.yml` | Reusable docs sync workflow |
 | `43_reusable-issue-management.yml` | Reusable issue management |
 | `44_reusable-pr-checks.yml` | Reusable PR checks |
-| `45_reusable-gitleaks.yml` | Reusable Gitleaks scan |
-| `60_ci-auto-heal.yml` | CI self-healing automation |
-| `91_issue-classification.yml` | Issue classification |
-| `ci.yml` | Basic CI pipeline |
-| `security/11_pr-review.yml` | Security-focused PR review |
+| `45_reusable-gitleaks.yml` | Reusable secret scanning |
+| `60_ci-auto-heal.yml` | Auto-diagnose and retry failed CI |
+| `91_issue-classification.yml` | Classify issues with AI |
+| `ci.yml` | Main CI pipeline |
 
-### Node.js Scripts / Node.js 스크립트
+### Bot Scripts (inside `_bot-scripts/scripts/`)
 
-| Script | Description |
-|--------|-------------|
-| `lab-runner.mjs` | Main PortSwigger lab orchestrator |
-| `lab-solver.mjs` | Custom Playwright-based lab solvers |
-| `lab-gap-solver.mjs` | Gap solver for labs without scripts |
-| `lab-batch-*.mjs` | Batch lab runners (fast, slow, OOB, smuggling) |
-| `lab-runner-aggressive.mjs` | Aggressive lab runner |
-| `lab-gap-helpers.mjs` | Gap solver helper utilities |
-
-### Go Helper Programs / Go 헬퍼 프로그램
-
-| Script | Description |
-|--------|-------------|
-| `setup.go` | Tool verification + wordlist download |
-| `recon.go` | 5-phase recon pipeline |
-| `monitor.go` | Diff monitoring + crt.sh + Discord alerts |
-| `hunt.go` | 4-phase targeted vulnerability hunting |
-| `lib.go` | Shared helpers (loadLines, queryCrtSh, etc.) |
-
-### Bot-Side Scripts / 봇 사이드 스크립트
-
-Located in `_bot-scripts/` (transient CI checkout path):
-
-| Script | Description |
-|--------|-------------|
-| `generate_readme.py` | README auto-generation via CLIProxy |
+| Script | Purpose |
+|--------|---------|
+| `generate_readme.py` | README auto-generation |
 | `pr_review_runner.py` | PR review execution |
-| `repo_review.py` | Repository review |
-| `redact_exposed_secrets.py` | Secret redaction |
-| `check_private_ips.py` | Private IP detection |
-| `check_workflow_scripts.py` | Workflow script validation |
-| `issue_classifier_js_test.js` | Issue classification tests |
+| `repo_review.py` | Repository security review |
+| `redact_exposed_secrets.py` | Redact leaked secrets |
+| `check_private_ips.py` | Detect hardcoded private IPs |
+| `check_workflow_scripts.py` | Validate workflow scripts |
+| `check_hardcode_scan_patterns_test.py` | Scan pattern validation |
+| `issue_classification_workflow_test.py` | Issue classification test |
+| `issue_classifier_js_test.py` | JS issue classifier test |
+| `pr_review_runner_test.py` | PR runner unit tests |
+| `readme_mermaid_test.py` | Mermaid diagram validation |
 
 ---
 
 ## Quick Start / 빠른 시작
 
-### English
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/jclee941/.github
-cd bug
-
-# 2. First-time setup
-make setup
-
-# 3. Run recon on a target
-make recon TARGET=example.com
-
-# 4. Monitor for changes
-make monitor TARGET=example.com
-
-# 5. Hunt vulnerabilities
-make hunt TARGET=example.com
-
-# 6. Full scan (recon + hunt)
-make full-scan TARGET=example.com
-```
-
-### 한국어
-
-```bash
-# 1. 레포 클론
-git clone https://github.com/jclee941/.github
-cd bug
-
-# 2. 최초 설정
-make setup
-
-# 3. 타겟 재정찰 실행
-make recon TARGET=example.com
-
-# 4. 변경 사항 모니터링
-make monitor TARGET=example.com
-
-# 5. 취약점 헌팅
-make hunt TARGET=example.com
-
-# 6. 전체 스캔 (재정찰 + 헌팅)
-make full-scan TARGET=example.com
-```
-
----
-
-## Local Development / 로컬 개발
-
 ### Prerequisites
 
-- Go 1.21+
-- Node.js 18+
-- Playwright (`npx playwright install`)
-- Tools: nuclei, subfinder, assetfinder, ffuf, naabu, sqli, xsstrike (auto-installed via `make setup`)
+- **Go** 1.21+
+- **Node.js** 18+ (ESM modules)
+- **Playwright** (`npx playwright install`)
+- **Tools**: subfinder, nuclei, httpx, naabu, assetfinder, amass
 
-### Environment Variables
+### Setup
 
 ```bash
-# Optional: Discord webhook for monitoring alerts
-export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
-
-# Optional: Custom targets config
-export TARGETS_CONFIG="config/targets.json"
+git clone https://github.com/jclee941/.github
+cd bug
+make setup
 ```
 
-### Directory Structure
+### Basic Commands
 
+```bash
+make help                    # Show all available commands
+
+make recon TARGET=target.com     # Full recon pipeline
+make monitor TARGET=target.com   # Monitor for changes
+make hunt TARGET=target.com      # Vulnerability hunting
+make full-scan TARGET=target.com # Recon + hunt combined
 ```
-bug/
-├── Makefile              # Main orchestration
-├── package.json          # Node.js dependencies (Playwright)
-├── config/
-│   └── targets.json      # Target configuration
-├── scripts/
-│   ├── *.go              # Go helper programs
-│   ├── *.mjs             # Node.js ESM lab scripts
-│   └── *.cjs             # Node.js CJS batch solvers
-├── notes/
-│   ├── phase2-checklist.md
-│   └── report-template.md
-├── _bot-scripts/         # Bot-side helpers (CI transient)
-├── recon/                # Scan results (gitignored)
-├── targets/              # Target baselines (gitignored)
-├── reports/              # Bug reports (gitignored)
-└── wordlists/            # SecLists downloads (gitignored)
+
+### Lab Solving (PortSwigger)
+
+```bash
+node scripts/lab-runner.mjs <lab-url>   # Single lab
+node scripts/lab-batch-fast.mjs         # Fast batch mode
+node scripts/lab-batch-oob.mjs          # OOB techniques
+```
+
+### Bot Script Execution (CI context)
+
+```bash
+# Via CLIProxy API endpoint (cliproxy.jclee.me)
+curl -X POST https://cliproxy.jclee.me/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"minimax-m2.7","messages":[{"role":"user","content":"..."}]}'
+
+# Or local Python execution
+cd _bot-scripts
+pip install -r requirements.txt
+python scripts/generate_readme.py
 ```
 
 ---
 
 ## Commands Reference / 명령어 참조
 
+### Make targets
+
+| Command | Description |
+|---------|-------------|
+| `make help` | Display all available commands |
+| `make setup` | First-time setup — verify tools, download SecLists wordlists |
+| `make recon TARGET=x.com` | 5-phase recon: subdomains → HTTP probing → nuclei → crawling → merge |
+| `make recon-fast TARGET=x.com` | Recon without nuclei scan |
+| `make monitor TARGET=x.com` | Diff monitoring via crt.sh + Discord webhook |
+| `make hunt TARGET=x.com` | 4-phase vulnerability hunting (all categories) |
+| `make hunt-idor TARGET=x.com` | IDOR vulnerabilities only |
+| `make hunt-ssrf TARGET=x.com` | SSRF vulnerabilities only |
+| `make hunt-sqli TARGET=x.com` | SQL injection only |
+| `make full-scan TARGET=x.com` | Recon + hunt combined |
+| `make clean` | Remove scan results (recon/, targets/) |
+
+### Go scripts (direct execution)
+
 ```bash
-make help                          # Show all available commands
-make setup                         # First-time setup
-make recon TARGET=target.com       # Full recon pipeline
-make recon-fast TARGET=target.com  # Recon without nuclei scan
-make monitor TARGET=target.com     # Diff-based change detection
-make hunt TARGET=target.com        # All vulnerability categories
-make hunt-idor TARGET=target.com   # IDOR vulnerabilities only
-make hunt-ssrf TARGET=target.com   # SSRF vulnerabilities only
-make full-scan TARGET=target.com  # Recon + hunt combined
-make clean                         # Remove scan results
+go run scripts/setup.go scripts/lib.go           # Tool verification + wordlists
+go run scripts/recon.go scripts/lib.go -d target.com
+go run scripts/monitor.go scripts/lib.go -d target.com
+go run scripts/hunt.go scripts/lib.go -d target.com
 ```
 
-### Target Configuration
+### Node.js scripts
 
-Add targets to `config/targets.json`:
+```bash
+node scripts/lab-runner.mjs <lab-url>
+node scripts/lab-solver.mjs <lab-url> [options]
+node scripts/lab-gap-solver.mjs <lab-url>
+node scripts/lab-batch-fast.mjs
+```
+
+---
+
+## Local Development / 로컬 개발
+
+### Adding a new target
+
+Edit `config/targets.json`:
 
 ```json
 {
@@ -337,97 +388,83 @@ Add targets to `config/targets.json`:
 }
 ```
 
----
+### Adding a new hunt category
 
-## GitHub Actions / GitHub 액션스
+Edit `scripts/hunt.go` → add to `huntTypes` slice:
 
-### PR Automation / PR 자동화
+```go
+var huntTypes = []string{
+    "idor", "ssrf", "sqli", "xss", "csrf", "openredirect",
+    // add new category here
+}
+```
 
-| Workflow | Trigger | Action |
-|----------|---------|--------|
-| `10_pr-review.yml` | `pull_request_review` | Auto-review PRs via pr-agent |
-| `13_pr-auto-merge.yml` | `pull_request` | Auto-merge on approval |
-| `14_bot-auto-fix.yml` | `pull_request` | Apply bot fixes |
-| `15_merged-pr-cleanup.yml` | `push` (main) | Clean up merged branches |
+### Modifying the recon pipeline
 
-### Security Scanning / 보안 스캐닝
+Edit `scripts/recon.go` — each phase is a separate function:
 
-| Workflow | Tool | Schedule |
-|----------|------|----------|
-| `05_gitleaks.yml` | Gitleaks | On push/PR |
-| `06_codeql.yml` | CodeQL | On push/PR |
-| `07_dependency-review.yml` | Dependency Review | On PR |
-| `08_scorecard.yml` | OpenSSF Scorecard | Daily |
+1. `phaseSubdomainEnumeration`
+2. `phaseHttpProbing`
+3. `phaseNucleiScan`
+4. `phaseWebCrawling`
+5. `phaseResultMerge`
 
-### Issue Management / 이슈 관리
-
-| Workflow | Trigger | Action |
-|----------|---------|--------|
-| `18_issue-management.yml` | `issues` | Lifecycle management |
-| `19_issue-backfill.yml` | `workflow_dispatch` | Content backfill |
-| `91_issue-classification.yml` | `issues` | Auto-classify |
-
-### Release Automation / 릴리스 자동화
+### Bot script development
 
 ```bash
-# Trigger release workflow
-git tag v1.0.0
-git push origin v1.0.0
+cd _bot-scripts
+
+# Install dependencies
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# Run tests
+python -m pytest scripts/*.py
+
+# Lint
+flake8 scripts/*.py
 ```
 
 ---
 
 ## Contribution Guide / 기여 가이드
 
-### English
+Contributions are welcome. Please read `CONTRIBUTING.md` before submitting PRs.
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+### Key conventions
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feat/my-feature`
-3. Commit changes: `git commit -m 'Add my feature'`
-4. Push to branch: `git push origin feat/my-feature`
-5. Open a Pull Request
+- **Standalone Go scripts**: No `go.mod`, run via `go run scripts/x.go scripts/lib.go`
+- **Go stdlib only**: No external Go dependencies (use `os/exec` for CLI tools)
+- **Node.js ESM**: All `.mjs`/`.cjs` scripts use ES modules
+- **No hardcoded targets**: Use `config/targets.json` or environment variables
+- **Gitignored artifacts**: Never commit `recon/`, `targets/`, `reports/`, `wordlists/`
 
-### 한국어
+### Workflow naming
 
-기여를 환영합니다! 가이드는 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
+- Workflow files use numeric prefixes (e.g., `03_pr-checks.yml`) for sort order
+- Reusable workflows are prefixed with `4x_`, `9x_` for category grouping
+- Security-specific workflows live under `security/` directory
 
-1. 레포 포크
-2. 기능 브랜치 생성: `git checkout -b feat/my-feature`
-3. 변경 사항 커밋: `git commit -m 'Add my feature'`
-4. 브랜치에 푸시: `git push origin feat/my-feature`
-5. Pull Request 열기
+### Bot script conventions
 
-### Conventions / 컨벤션
-
-- Go 스크립트는 독립 실행 파일로, `go run scripts/x.go`로 실행
-- 모든 스크립트는 Go stdlib만 사용 (외부 의존성 없음)
-- 결과는 `recon/` 아래 타임스탬프 디렉토리에 저장
-- 민감한 스캔 데이터는 gitignored
-
-### Anti-Patterns / 금지 사항
-
-- 스캔 결과 커밋 금지 (`recon/`, `targets/`, `reports/`)
-- 스크립트에 타겟 도메인 하드코딩 금지
-- 명시적 권한 없이 스캔 실행 금지
-- rate limit 초과 금지 (기본: nuclei 100 req/s)
+- All bot scripts in `_bot-scripts/scripts/` are Python-based
+- Tests use `_test.py` suffix
+- Use `requirements.txt` for runtime, `requirements-dev.txt` for development
 
 ---
 
-## License / 라이선스
+## External Resources / 외부 리소스
 
-ISC License. See [LICENSE](LICENSE) for details.
+| Resource | Link |
+|----------|------|
+| PR Review Agent | [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent) |
+| CLIProxy API | [cliproxy.jclee.me](https://cliproxy.jclee.me) |
+| Bot Dashboard | [bot.jclee.me](https://bot.jclee.me) |
+| PortSwigger Lab | [portswigger.net/web-security](https://portswigger.net/web-security) |
+| OpenSSF Security | [openssf.org](https://openssf.org/) |
 
 ---
 
-## External Links / 외부 링크
+## License
 
-- [CLIProxy API (README model)](https://cliproxy.jclee.me)
-- [pr-agent](https://qodo-ai/pr-agent)
-- [PortSwigger Web Security Academy](https://portswigger.net/web-security)
-- [OpenSSF Scorecard](https://openssf.org/projects/scorecard/)
-
-```
-
-**Note**: The Mermaid architecture diagram uses HTML-escaped angle brackets (`&lt;` / `&gt;`) for the CLIProxy API reference label to ensure proper rendering on GitHub. All external links use only verified, publicly available endpoints.
+ISC License. See [LICENSE](LICENSE).
