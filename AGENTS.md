@@ -12,10 +12,18 @@ recon → monitoring → vulnerability hunting → reporting.
 ├── Makefile                  # Orchestration (make help for commands)
 ├── config/targets.json       # Target and notification configuration
 ├── scripts/
+	├── setup.go    (208L)    # Tool verification + wordlist download
+	├── recon.go    (282L)    # 5-phase recon pipeline
+	├── monitor.go  (254L)    # Diff monitoring + crt.sh + Discord alerts
+	├── hunt.go     (464L)    # 4-phase targeted vulnerability hunting
+	└── lib.go     (114L)    # Shared helpers (loadLines, countLines, queryCrtSh, mergeFiles, writeLines, truncate, logging)
 │   ├── setup.go    (223L)    # Tool verification + wordlist download
 │   ├── recon.go    (~350L)   # 5-phase recon pipeline
 │   ├── monitor.go  (312L)    # Diff monitoring + crt.sh + Discord alerts
-│   └── hunt.go     (509L)    # 4-phase targeted vulnerability hunting
+│   ├── hunt.go     (509L)    # 4-phase targeted vulnerability hunting
+│   ├── lab-runner.mjs  (262L)    # PortSwigger lab solver using Python scripts
+│   ├── lab-solver.mjs  (559L)    # Custom Playwright lab solvers
+│   └── lab-gap-solver.mjs (1236L) # Gap solver for labs without Python scripts
 ├── notes/
 │   ├── phase2-checklist.md   # Learning checklist
 │   └── report-template.md    # Bug report template
@@ -33,6 +41,7 @@ recon → monitoring → vulnerability hunting → reporting.
 | Run full recon | `make recon TARGET=x.com` |
 | Monitor for changes | `make monitor TARGET=x.com` |
 | Hunt vulnerabilities | `make hunt TARGET=x.com` |
+| Solve PortSwigger labs | `scripts/lab-runner.mjs` |
 | Modify recon pipeline | `scripts/recon.go` |
 | Add hunt categories | `scripts/hunt.go` → `huntTypes` slice |
 | Change nuclei settings | Each script's flag defaults |

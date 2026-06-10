@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -33,35 +34,52 @@ var tools = []tool{
 }
 
 func main() {
+	ctx, cancel := SetupSignalContext()
+	defer cancel()
+
 	fmt.Println()
 	fmt.Println("  ┌─────────────────────────────────────┐")
 	fmt.Println("  │      Bug Bounty Setup Checker        │")
 	fmt.Println("  └─────────────────────────────────────┘")
 	fmt.Println()
 
-	checkTools()
-	checkDirs()
-	checkNucleiTemplates()
-	checkWordlists()
-	checkSubfinderConfig()
+	runSetupStep(ctx, "Checking tools", checkTools)
+	runSetupStep(ctx, "Checking directories", checkDirs)
+	runSetupStep(ctx, "Checking Nuclei templates", checkNucleiTemplates)
+	runSetupStep(ctx, "Checking wordlists", checkWordlists)
+	runSetupStep(ctx, "Checking Subfinder config", checkSubfinderConfig)
 
 	fmt.Println()
-	success("Setup verification complete")
+	logSuccess("Setup verification complete")
 	fmt.Println()
 }
 
-func checkTools() {
-	info("Checking installed tools...")
+func runSetupStep(ctx context.Context, label string, fn func(context.Context)) {
+	if ctx.Err() != nil {
+		logWarn("Interrupted — skipping remaining setup checks")
+		return
+	}
+	stop := Progress(label)
+	fn(ctx)
+	stop()
+}
+
+func checkTools(ctx context.Context) {
+	logInfo("Checking installed tools...")
 	missing := 0
 
 	for _, t := range tools {
+		if ctx.Err() != nil {
+			logWarn("  Interrupted — partial tool check complete")
+			return
+		}
 		path, err := exec.LookPath(t.Binary)
 		if err != nil {
 			if t.Required {
 				fail("  %-12s NOT FOUND — install: %s", t.Name, t.Install)
 				missing++
 			} else {
-				warn("  %-12s not found (optional) — install: %s", t.Name, t.Install)
+				logWarn("  %-12s not found (optional) — install: %s", t.Name, t.Install)
 			}
 		} else {
 			ok("  %-12s %s", t.Name, path)
@@ -69,15 +87,19 @@ func checkTools() {
 	}
 
 	if missing > 0 {
-		warn("\n  %d required tools missing. Install them before proceeding.", missing)
+		logWarn("\n  %d required tools missing. Install them before proceeding.", missing)
 	}
 }
 
-func checkDirs() {
-	info("Checking directory structure...")
+func checkDirs(ctx context.Context) {
+	logInfo("Checking directory structure...")
 	dirs := []string{"recon", "reports", "targets", "wordlists", "scripts", "notes", "config"}
 
 	for _, d := range dirs {
+		if ctx.Err() != nil {
+			logWarn("  Interrupted — partial directory check complete")
+			return
+		}
 		if _, err := os.Stat(d); os.IsNotExist(err) {
 			os.MkdirAll(d, 0o755)
 			ok("  Created %s/", d)
@@ -87,14 +109,14 @@ func checkDirs() {
 	}
 }
 
-func checkNucleiTemplates() {
-	info("Checking Nuclei templates...")
+func checkNucleiTemplates(ctx context.Context) {
+	logInfo("Checking Nuclei templates...")
 	home, _ := os.UserHomeDir()
 	tmplDir := filepath.Join(home, "nuclei-templates")
 
 	if _, err := os.Stat(tmplDir); os.IsNotExist(err) {
-		warn("  Templates not found. Installing...")
-		cmd := exec.Command("nuclei", "-update-templates")
+		logWarn("  Templates not found. Installing...")
+		cmd := exec.CommandContext(ctx, "nuclei", "-update-templates")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -103,7 +125,6 @@ func checkNucleiTemplates() {
 		}
 	}
 
-	// Count templates
 	count := 0
 	filepath.Walk(tmplDir, func(path string, info os.FileInfo, err error) error {
 		if err == nil && strings.HasSuffix(path, ".yaml") {
@@ -114,53 +135,47 @@ func checkNucleiTemplates() {
 	ok("  %d templates available at %s", count, tmplDir)
 }
 
-func checkWordlists() {
-	info("Checking wordlists...")
+func checkWordlists(ctx context.Context) {
+	logInfo("Checking wordlists...")
 	wlDir := "wordlists"
 
-	dnsWordlist := filepath.Join(wlDir, "dns-subdomains.txt")
-	if _, err := os.Stat(dnsWordlist); os.IsNotExist(err) {
-		warn("  DNS wordlist not found. Downloading...")
-		downloadFile(
-			"https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt",
-			dnsWordlist,
-		)
-	} else {
-		ok("  DNS wordlist: %s (%d lines)", dnsWordlist, lineCount(dnsWordlist))
+	entries := []struct {
+		path string
+		url  string
+		name string
+	}{
+		{filepath.Join(wlDir, "dns-subdomains.txt"), "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt", "DNS wordlist"},
+		{filepath.Join(wlDir, "dirb-common.txt"), "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt", "Directory wordlist"},
+		{filepath.Join(wlDir, "params-common.txt"), "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/burp-parameter-names.txt", "Parameters wordlist"},
 	}
 
-	dirbWordlist := filepath.Join(wlDir, "dirb-common.txt")
-	if _, err := os.Stat(dirbWordlist); os.IsNotExist(err) {
-		warn("  Directory wordlist not found. Downloading...")
-		downloadFile(
-			"https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt",
-			dirbWordlist,
-		)
-	} else {
-		ok("  Dir wordlist: %s (%d lines)", dirbWordlist, lineCount(dirbWordlist))
-	}
-
-	paramsWordlist := filepath.Join(wlDir, "params-common.txt")
-	if _, err := os.Stat(paramsWordlist); os.IsNotExist(err) {
-		warn("  Parameters wordlist not found. Downloading...")
-		downloadFile(
-			"https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/burp-parameter-names.txt",
-			paramsWordlist,
-		)
-	} else {
-		ok("  Params wordlist: %s (%d lines)", paramsWordlist, lineCount(paramsWordlist))
+	for _, entry := range entries {
+		if ctx.Err() != nil {
+			logWarn("  Interrupted — partial wordlist check complete")
+			return
+		}
+		if _, err := os.Stat(entry.path); os.IsNotExist(err) {
+			logWarn("  %s not found. Downloading...", entry.name)
+			downloadFile(ctx, entry.url, entry.path)
+			continue
+		}
+		ok("  %s: %s (%d lines)", entry.name, entry.path, countLines(entry.path))
 	}
 }
 
-func checkSubfinderConfig() {
-	info("Checking Subfinder API keys...")
+func checkSubfinderConfig(ctx context.Context) {
+	if ctx.Err() != nil {
+		logWarn("  Interrupted — skipping Subfinder config check")
+		return
+	}
+	logInfo("Checking Subfinder API keys...")
 	home, _ := os.UserHomeDir()
 	configPath := filepath.Join(home, ".config", "subfinder", "provider-config.yaml")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		warn("  No API keys configured. Subfinder works without them but finds fewer subdomains.")
-		warn("  Configure at: %s", configPath)
-		warn("  Get free API keys from: SecurityTrails, VirusTotal, Shodan, Censys")
+		logWarn("  No API keys configured. Subfinder works without them but finds fewer subdomains.")
+		logWarn("  Configure at: %s", configPath)
+		logWarn("  Get free API keys from: SecurityTrails, VirusTotal, Shodan, Censys")
 	} else {
 		data, _ := os.ReadFile(configPath)
 		sources := strings.Count(string(data), ":")
@@ -168,9 +183,14 @@ func checkSubfinderConfig() {
 	}
 }
 
-func downloadFile(url, dest string) {
+func downloadFile(ctx context.Context, url, dest string) {
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		fail("  Download failed: %v", err)
+		return
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		fail("  Download failed: %v", err)
 		return
@@ -182,42 +202,18 @@ func downloadFile(url, dest string) {
 		return
 	}
 
-	buf := make([]byte, 0, 1024*1024)
-	tmp := make([]byte, 32*1024)
-	for {
-		n, err := resp.Body.Read(tmp)
-		if n > 0 {
-			buf = append(buf, tmp[:n]...)
-		}
-		if err != nil {
-			break
-		}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fail("  Download failed: %v", err)
+		return
 	}
 
-	if err := os.WriteFile(dest, buf, 0o644); err != nil {
+	if err := os.WriteFile(dest, data, 0o644); err != nil {
 		fail("  Write failed: %v", err)
 		return
 	}
-	ok("  Downloaded %s (%d bytes)", dest, len(buf))
+	ok("  Downloaded %s (%d bytes)", dest, len(data))
 }
 
-func lineCount(path string) int {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0
-	}
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return 0
-	}
-	return len(lines)
-}
-
-func info(f string, a ...any) { fmt.Printf("\033[34m[*]\033[0m "+f+"\n", a...) }
 func ok(f string, a ...any)   { fmt.Printf("\033[32m[✓]\033[0m "+f+"\n", a...) }
-func warn(f string, a ...any) { fmt.Printf("\033[33m[!]\033[0m "+f+"\n", a...) }
 func fail(f string, a ...any) { fmt.Printf("\033[31m[✗]\033[0m "+f+"\n", a...) }
-func success(f string, a ...any) {
-	fmt.Printf("\033[32m[+]\033[0m "+f+"\n", a...)
-	_ = runtime.GOOS // suppress unused import
-}

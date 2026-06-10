@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +24,7 @@ type ReconCtx struct {
 	OutputDir  string
 	StartTime  time.Time
 	Severity   string
+	RateLimit  int
 	SkipNuclei bool
 }
 
@@ -33,6 +32,7 @@ func main() {
 	domain := flag.String("d", "", "Target domain (required)")
 	severity := flag.String("severity", "medium,high,critical", "Nuclei severity filter")
 	skipNuclei := flag.Bool("skip-nuclei", false, "Skip nuclei vulnerability scan")
+	useConfig := flag.Bool("config", false, "Read target from config/targets.json")
 	listPhases := flag.Bool("list", false, "List available phases")
 	flag.Parse()
 
@@ -41,8 +41,49 @@ func main() {
 		return
 	}
 
-	if *domain == "" {
-		fmt.Fprintln(os.Stderr, "Usage: go run recon.go -d <domain>")
+	severitySet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "severity" {
+			severitySet = true
+		}
+	})
+
+	resolvedDomain := *domain
+	resolvedSeverity := *severity
+	resolvedRateLimit := 100
+
+	if *useConfig {
+		cfg, err := loadConfig(filepath.Join("config", "targets.json"))
+		if err != nil {
+			logFatal("Failed to load config: %v", err)
+		}
+
+		activeTarget := cfg.ActiveTarget()
+		if activeTarget == nil {
+			logFatal("No active target found in config/targets.json")
+		}
+
+		if resolvedDomain == "" {
+			resolvedDomain = activeTarget.Domain
+		}
+		if !severitySet {
+			switch {
+			case activeTarget.Severity != "":
+				resolvedSeverity = activeTarget.Severity
+			case cfg.Defaults.Severity != "":
+				resolvedSeverity = cfg.Defaults.Severity
+			}
+		}
+		switch {
+		case activeTarget.RateLimit > 0:
+			resolvedRateLimit = activeTarget.RateLimit
+		case cfg.Defaults.RateLimit > 0:
+			resolvedRateLimit = cfg.Defaults.RateLimit
+		}
+	}
+
+	if resolvedDomain == "" {
+		fmt.Fprintln(os.Stderr, "Usage: go run recon.go lib.go -d <domain>")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		flag.PrintDefaults()
@@ -50,17 +91,18 @@ func main() {
 	}
 
 	ctx := &ReconCtx{
-		Domain:     *domain,
+		Domain:     resolvedDomain,
 		StartTime:  time.Now(),
-		Severity:   *severity,
+		Severity:   resolvedSeverity,
+		RateLimit:  resolvedRateLimit,
 		SkipNuclei: *skipNuclei,
 	}
 
 	// Create timestamped output directory
 	ts := ctx.StartTime.Format("20060102-150405")
-	ctx.OutputDir = filepath.Join("recon", fmt.Sprintf("%s_%s", *domain, ts))
+	ctx.OutputDir = filepath.Join("recon", fmt.Sprintf("%s_%s", ctx.Domain, ts))
 	if err := os.MkdirAll(ctx.OutputDir, 0o755); err != nil {
-		fatal("Failed to create output dir: %v", err)
+		logFatal("Failed to create output dir: %v", err)
 	}
 
 	banner(ctx)
@@ -75,27 +117,32 @@ func main() {
 
 	for i, p := range phases {
 		if p.Name == "Vulnerability Scan" && ctx.SkipNuclei {
-			info("[%d/%d] Skipping %s (--skip-nuclei)", i+1, len(phases), p.Name)
+			logInfo("[%d/%d] Skipping %s (--skip-nuclei)", i+1, len(phases), p.Name)
 			continue
 		}
 
 		// Check dependencies
+		missingDep := false
 		for _, dep := range p.Depends {
 			depPath := filepath.Join(ctx.OutputDir, dep)
 			if _, err := os.Stat(depPath); os.IsNotExist(err) {
-				warn("[%d/%d] Skipping %s — missing dependency: %s", i+1, len(phases), p.Name, dep)
-				continue
+				logWarn("[%d/%d] Skipping %s — missing dependency: %s", i+1, len(phases), p.Name, dep)
+				missingDep = true
+				break
 			}
 		}
+		if missingDep {
+			continue
+		}
 
-		info("[%d/%d] %s", i+1, len(phases), p.Name)
+		logInfo("[%d/%d] %s", i+1, len(phases), p.Name)
 		if err := p.Run(ctx); err != nil {
-			warn("  Phase failed: %v", err)
+			logWarn("  Phase failed: %v", err)
 		}
 	}
 
 	elapsed := time.Since(ctx.StartTime).Round(time.Second)
-	info("Recon complete in %s — results: %s/", elapsed, ctx.OutputDir)
+	logInfo("Recon complete in %s — results: %s/", elapsed, ctx.OutputDir)
 }
 
 // --- Phases ---
@@ -105,11 +152,11 @@ func phaseSubdomains(ctx *ReconCtx) error {
 
 	// Run subfinder
 	if err := run("subfinder", "-d", ctx.Domain, "-silent", "-all", "-o", out); err != nil {
-		warn("  subfinder failed: %v", err)
+		logWarn("  subfinder failed: %v", err)
 	}
 
 	// Query crt.sh for additional subdomains
-	info("  Querying crt.sh...")
+	logInfo("  Querying crt.sh...")
 	crtSubs := queryCrtSh(ctx.Domain)
 
 	// Merge subfinder + crt.sh results
@@ -126,8 +173,8 @@ func phaseSubdomains(ctx *ReconCtx) error {
 	sort.Strings(merged)
 	os.WriteFile(out, []byte(strings.Join(merged, "\n")+"\n"), 0o644)
 
-	count := lineCount(out)
-	info("  Found %d subdomains (subfinder: %d, crt.sh: %d)", count, len(existing), len(crtSubs))
+	count := countLines(out)
+	logInfo("  Found %d subdomains (subfinder: %d, crt.sh: %d)", count, len(existing), len(crtSubs))
 	return nil
 }
 
@@ -146,8 +193,8 @@ func phaseLiveHosts(ctx *ReconCtx) error {
 		return fmt.Errorf("httpx: %w", err)
 	}
 
-	count := lineCount(out)
-	info("  %d live hosts detected", count)
+	count := countLines(out)
+	logInfo("  %d live hosts detected", count)
 	return nil
 }
 
@@ -166,8 +213,8 @@ func phaseURLs(ctx *ReconCtx) error {
 	// Merge and deduplicate
 	mergeFiles(allURLs, katanaOut, gauOut)
 
-	count := lineCount(allURLs)
-	info("  Collected %d unique URLs", count)
+	count := countLines(allURLs)
+	logInfo("  Collected %d unique URLs", count)
 	return nil
 }
 
@@ -180,18 +227,18 @@ func phaseNuclei(ctx *ReconCtx) error {
 		"-severity", ctx.Severity,
 		"-silent",
 		"-o", out,
-		"-rate-limit", "100",
+		"-rate-limit", fmt.Sprintf("%d", ctx.RateLimit),
 	}
 
 	if err := run("nuclei", args...); err != nil {
 		return fmt.Errorf("nuclei: %w", err)
 	}
 
-	count := lineCount(out)
+	count := countLines(out)
 	if count > 0 {
-		success("  🎯 %d potential vulnerabilities found!", count)
+		logSuccess("  🎯 %d potential vulnerabilities found!", count)
 	} else {
-		info("  No vulnerabilities found at %s severity", ctx.Severity)
+		logInfo("  No vulnerabilities found at %s severity", ctx.Severity)
 	}
 	return nil
 }
@@ -220,7 +267,7 @@ func phaseSummary(ctx *ReconCtx) error {
 
 	for _, f := range files {
 		path := filepath.Join(ctx.OutputDir, f.name)
-		count := lineCount(path)
+		count := countLines(path)
 		sb.WriteString(fmt.Sprintf("| `%s` | %d | %s |\n", f.name, count, f.desc))
 	}
 
@@ -235,7 +282,7 @@ func phaseSummary(ctx *ReconCtx) error {
 		return err
 	}
 
-	info("  Report saved: %s", reportPath)
+	logInfo("  Report saved: %s", reportPath)
 	return nil
 }
 
@@ -262,82 +309,6 @@ func runPipe(inputFile string, name string, args ...string) error {
 	return cmd.Run()
 }
 
-func mergeFiles(output string, inputs ...string) {
-	seen := make(map[string]bool)
-	var lines []string
-
-	for _, input := range inputs {
-		data, err := os.ReadFile(input)
-		if err != nil {
-			continue
-		}
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if line != "" && !seen[line] {
-				seen[line] = true
-				lines = append(lines, line)
-			}
-		}
-	}
-
-	_ = os.WriteFile(output, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
-}
-
-func queryCrtSh(domain string) []string {
-	client := &http.Client{Timeout: 15 * time.Second}
-	url := fmt.Sprintf("https://crt.sh/?q=%%25.%s&output=json", domain)
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	var entries []struct {
-		NameValue string `json:"name_value"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
-		return nil
-	}
-
-	var subs []string
-	for _, e := range entries {
-		for _, name := range strings.Split(e.NameValue, "\n") {
-			name = strings.TrimSpace(name)
-			if name != "" && !strings.HasPrefix(name, "*") {
-				subs = append(subs, name)
-			}
-		}
-	}
-	return subs
-}
-
-func loadLines(path string) []string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var lines []string
-	for _, l := range strings.Split(string(data), "\n") {
-		l = strings.TrimSpace(l)
-		if l != "" {
-			lines = append(lines, l)
-		}
-	}
-	return lines
-}
-
-func lineCount(path string) int {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0
-	}
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return 0
-	}
-	return len(lines)
-}
-
 func banner(ctx *ReconCtx) {
 	fmt.Printf("\n")
 	fmt.Printf("  ┌─────────────────────────────────────┐\n")
@@ -356,12 +327,4 @@ func printPhases() {
 	fmt.Println("  3. URL Collection         (katana + gau)")
 	fmt.Println("  4. Vulnerability Scan     (nuclei)")
 	fmt.Println("  5. Summary Report         (markdown)")
-}
-
-func info(format string, a ...any)    { fmt.Printf("\033[34m[*]\033[0m "+format+"\n", a...) }
-func success(format string, a ...any) { fmt.Printf("\033[32m[+]\033[0m "+format+"\n", a...) }
-func warn(format string, a ...any)    { fmt.Printf("\033[33m[!]\033[0m "+format+"\n", a...) }
-func fatal(format string, a ...any) {
-	fmt.Fprintf(os.Stderr, "\033[31m[-]\033[0m "+format+"\n", a...)
-	os.Exit(1)
 }

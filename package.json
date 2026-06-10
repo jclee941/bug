@@ -1,8 +1,9 @@
 {
   "name": "bug",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Bug bounty automation toolkit",
+  "type": "module",
+  "main": "scripts/lab-runner.mjs",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -18,6 +19,6 @@
   },
   "homepage": "https://github.com/jclee941/bug#readme",
   "dependencies": {
-    "playwright": "^1.59.1"
+    "playwright": "^1.60.0"
   }
 }

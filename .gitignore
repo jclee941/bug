@@ -25,4 +25,7 @@ Thumbs.db
 # Temp
 *.tmp
 *.log
-lab-solver.mjs
+node_modules/
+.playwright-mcp/
+.sisyphus/
+.env
