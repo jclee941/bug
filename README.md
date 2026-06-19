@@ -1,5 +1,18 @@
 # Bug Bounty Automation Toolkit / 버그바운티 자동화 툴킷
 
+<!-- jclee-bot-automation-status:start -->
+## GitHub Automation Status / GitHub 자동화 현황
+
+Current as of 2026-06-19.
+
+- Primary PR review/checks and issue maintenance run through the `jclee-bot` GitHub App.
+- Issue automation includes opened-issue labels, stale-label removal, stale issue sweep/close, and issue-summary upkeep.
+- Existing `.github/workflows` files are compatibility GitOps surfaces managed from `jclee941/.github`; do not treat legacy per-repo workflow counts as the production bot rollout path.
+- Source of truth: `jclee941/.github` (`config/repos.yaml`, `jclee_bot/`, and central workflows).
+
+<!-- jclee-bot-automation-status:end -->
+
+
 [![Node.js](https://img.shields.io/badge/Node.js-ESM-339933?logo=node.js)](https://nodejs.org/)
 [![Playwright](https://img.shields.io/badge/Playwright-1.60%2B-45ba4b?logo=playwright)](https://playwright.dev/)
 [![Go](https://img.shields.io/badge/Go-scripts-00ADD8?logo=go)](https://go.dev/)
