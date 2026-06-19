@@ -112,7 +112,7 @@ flowchart TB
             W12[13_pr-auto-merge.yml]
             W13[14_bot-auto-fix.yml]
             W14[15_merged-pr-cleanup.yml]
-            W15[18_issue-management.yml]
+            W15[jclee-bot App issue-management]
             W16[19_issue-backfill.yml]
             W17[20_readme-gen.yml]
             W18[21_docs-sync.yml]
@@ -121,7 +121,7 @@ flowchart TB
             W21[29_downstream-health-check.yml]
             W22[37_ci-failure-issues.yml]
             W23[42_reusable-docs-sync.yml]
-            W24[43_reusable-issue-management.yml]
+            W24[jclee-bot App issue-management]
             W25[44_reusable-pr-checks.yml]
             W26[45_reusable-gitleaks.yml]
             W27[60_ci-auto-heal.yml]
@@ -210,10 +210,10 @@ flowchart TB
 
 | 파일 | 설명 |
 |------|------|
-| `18_issue-management.yml` | 이슈 라벨링/정리 |
+| `jclee-bot App issue-management` | 이슈 라벨링/정리 |
 | `19_issue-backfill.yml` | 이슈 백필 automation |
 | `37_ci-failure-issues.yml` | CI 실패 시 이슈 자동 생성 |
-| `43_reusable-issue-management.yml` | 재사용 가능 이슈 관리 템플릿 |
+| `jclee-bot App issue-management` | 재사용 가능 이슈 관리 템플릿 |
 | `91_issue-classification.yml` | AI 기반 이슈 분류 |
 | `29_downstream-health-check.yml` | 다운스트림 상태 확인 |
 
@@ -452,7 +452,7 @@ bug/
 │       ├── 13_pr-auto-merge.yml
 │       ├── 14_bot-auto-fix.yml
 │       ├── 15_merged-pr-cleanup.yml
-│       ├── 18_issue-management.yml
+│       ├── jclee-bot App issue-management
 │       ├── 19_issue-backfill.yml
 │       ├── 20_readme-gen.yml
 │       ├── 21_docs-sync.yml
@@ -461,7 +461,7 @@ bug/
 │       ├── 29_downstream-health-check.yml
 │       ├── 37_ci-failure-issues.yml
 │       ├── 42_reusable-docs-sync.yml
-│       ├── 43_reusable-issue-management.yml
+│       ├── jclee-bot App issue-management
 │       ├── 44_reusable-pr-checks.yml
 │       ├── 45_reusable-gitleaks.yml
 │       ├── 60_ci-auto-heal.yml
