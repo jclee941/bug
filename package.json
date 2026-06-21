@@ -19,6 +19,6 @@
   },
   "homepage": "https://github.com/jclee941/bug#readme",
   "dependencies": {
-    "playwright": "^1.60.0"
+    "playwright": "^1.61.0"
   }
 }
