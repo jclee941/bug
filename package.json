@@ -18,6 +18,6 @@
   },
   "homepage": "https://github.com/jclee941/bug#readme",
   "dependencies": {
-    "playwright": "^1.59.1"
+    "playwright": "^1.61.0"
   }
 }
