@@ -1,17 +1,19 @@
 # Bug Bounty Automation Toolkit / 버그 바운티 자동화 툴킷
 
-[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](./LICENSE)
-[![core: Go stdlib](https://img.shields.io/badge/core-Go-00ADD8?logo=go&logoColor=white)](./scripts/)
-[![node: Playwright](https://img.shields.io/badge/node-playwright-339933?logo=node.js&logoColor=white)](./package.json)
-![Platform: Linux](https://img.shields.io/badge/platform-linux-FCC624?logo=linux&logoColor=black)
-![Maintained](https://img.shields.io/badge/maintained-yes-success.svg)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](#-license--라이선스)
+[![Core: Go stdlib](https://img.shields.io/badge/core-Go-00ADD8?logo=go&logoColor=white)](./scripts/)
+[![Node: Playwright](https://img.shields.io/badge/node-playwright-339933?logo=node.js&logoColor=white)](./package.json)
+[![Platform: Linux](https://img.shields.io/badge/platform-linux-FCC624?logo=linux&logoColor=black)](#-local-development--로컬-개발)
+[![Maintained: yes](https://img.shields.io/badge/maintained-yes-success.svg)](#-contribution-guide--기여-가이드)
 [![PRs: Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#-contribution-guide--기여-가이드)
 [![Pipeline: recon → monitor → hunt → report](https://img.shields.io/badge/pipeline-recon→monitor→hunt→report-6f42c1)](#-architecture--아키텍처)
 [![Automation owner: jclee-bot](https://img.shields.io/badge/automation%20owner-jclee--bot-8b5cf6)](#-jclee-bot-automation-surfaces--jclee-bot-자동화-표면)
-[![LLM gateway](https://img.shields.io/badge/LLM%20gateway-cliproxy.jclee.me-0ea5e9)](https://cliproxy.jclee.me/v1)
-[![PR review engine](https://img.shields.io/badge/PR%20review-qodo--ai%2Fpr--agent-f59e0b)](https://github.com/qodo-ai/pr-agent)
+[![LLM gateway: cliproxy.jclee.me](https://img.shields.io/badge/LLM%20gateway-cliproxy.jclee.me-0ea5e9)](https://cliproxy.jclee.me/v1)
+[![PR review engine: qodo-ai/pr-agent](https://img.shields.io/badge/PR%20review-qodo--ai%2Fpr--agent-f59e0b)](https://github.com/qodo-ai/pr-agent)
+[![App: bot.jclee.me](https://img.shields.io/badge/App-bot.jclee.me-111827)](https://bot.jclee.me)
+[![README model: gpt-5.5](https://img.shields.io/badge/README%20model-gpt--5.5-7c3aed)](#-readme-generation--readme-생성)
 
-> A Go-driven bug bounty automation toolkit that orchestrates the **recon → monitor → hunt → report** lifecycle, paired with a GitHub App–owned automation layer (`jclee-bot`) that keeps the repository itself healthy.
+> A Go-driven bug bounty automation toolkit that orchestrates the full **recon → monitor → hunt → report** lifecycle, paired with a GitHub App–owned automation layer (`jclee-bot`) that keeps the repository itself healthy.
 >
 > Go 표준 라이브러리 기반의 버그 바운티 자동화 툴킷. **정찰(recon) → 모니터링(monitor) → 헌팅(hunt) → 리포트(report)** 전 과정을 단일 인터페이스로 오케스트레이션하며, 저장소 자체의 건강 상태를 유지하는 `jclee-bot` 자동화 레이어를 함께 제공합니다.
 
@@ -29,377 +31,412 @@
 - [Configuration / 설정](#configuration--설정)
 - [Quick Start / 빠른 시작](#quick-start--빠른-시작)
 - [Local Development / 로컬 개발](#local-development--로컬-개발)
-- [Commands Reference / 명령어 레퍼런스](#commands-reference--명령어-레퍼런스)
-- [Output & Conventions / 출력과 컨벤션](#output--conventions--출력과-컨벤션)
+- [Commands Reference / 명령어 참조](#commands-reference--명령어-참조)
+- [LLM Gateway Integration / LLM 게이트웨이 연동](#llm-gateway-integration--llm-게이트웨이-연동)
 - [Contribution Guide / 기여 가이드](#contribution-guide--기여-가이드)
-- [Security & Ethics / 보안과 윤리](#security--ethics--보안과-윤리)
+- [Responsible Use & Disclaimer / 책임 있는 사용 및 면책](#responsible-use--disclaimer--책임-있는-사용-및-면책)
+- [License / 라이선스](#license--라이선스)
+- [Acknowledgments / 감사의 말](#acknowledgments--감사의-말)
 
 ---
 
 ## Overview / 개요
 
-This repository contains a self-contained bug-bounty automation stack organized around a small number of single-file Go programs that shell out to industry-standard reconnaissance and offensive tools. The `Makefile` is the public entry point — every operation is reachable via `make <command> TARGET=<domain>`.
+This repository is a **bug bounty automation toolkit** built around four composable Go programs (`setup`, `recon`, `monitor`, `hunt`) and a thin Node.js lab surface for browser-driven exercises. The toolkit is operated through a `Makefile` interface, so the entire hunting lifecycle is one terminal command away.
 
-Companion Node.js modules (`lab-runner.mjs`, `lab-solver.mjs`) provide a small Playwright-based harness for browser-driven lab challenges, which is why Playwright is declared in `package.json`.
+The repository is also self-hosting: a **GitHub App named `jclee-bot`** owns every mutating automation surface — issue triage, PR normalization, labeling, security review, stale cleanup, and welcome flows. Workflow files in `.github/workflows/` are *implementation triggers* for these surfaces; the *source of truth* is the `jclee-bot` App, not the workflow YAML.
 
-Above the application code sits a repository-automation layer owned by the `jclee-bot` GitHub App. `jclee-bot` is the **single source of truth** for all mutating actions performed on issues and pull requests (labeling, normalization, welcome, stale, auto-merge, reviews, security review, size enforcement). The GitHub Actions workflow files exist only as the execution triggers that materialize those decisions — they are not the source of truth, and should not be edited to add new behavior without coordinating with the App.
+이 저장소는 **버그 바운티 자동화 툴킷**입니다. 네 개의 Go 프로그램(`setup`, `recon`, `monitor`, `hunt`)과 브라우저 기반 연습용 Node.js 랩 도구를 중심으로 구성되며, `Makefile` 인터페이스를 통해 단일 명령으로 정찰부터 리포트까지의 전 과정을 실행할 수 있습니다.
 
-LLM-driven surfaces (PR review, security review, intelligent normalization) are routed through the public LLM gateway at `https://cliproxy.jclee.me/v1`, with `qodo-ai/pr-agent` as the review engine.
-
-> 본 저장소는 단일 파일 Go 프로그램들을 중심으로 한 자급자족형 버그 바운티 자동화 스택입니다. `Makefile`이 공용 진입점이며, 모든 작업은 `make <command> TARGET=<도메인>` 형태로 실행됩니다. `jclee-bot` GitHub App은 이슈/PR에 대한 모든 변경 자동화(라벨링, 정규화, 환영, stale 처리, 자동 머지, 리뷰, 보안 리뷰, 크기 제한 등)의 단일 진실 공급원(Single Source of Truth)이며, GitHub Actions 워크플로우 파일은 그 결정을 실행하는 트리거일 뿐, 진실의 원천이 아닙니다.
+또한 저장소 자체는 **`jclee-bot` GitHub 앱**이 모든 변동(mutating) 자동화 표면을 소유합니다 — 이슈 분류, PR 정규화, 라벨링, 보안 리뷰, stale 정리, 환영 메시지 등. `.github/workflows/`의 워크플로우 파일들은 이 자동화 표면들의 *구현 트리거*일 뿐이며, 진실의 원천은 `jclee-bot` 앱입니다.
 
 ---
 
 ## Features / 주요 기능
 
-- **Single-binary Go stdlib architecture** — no `go.mod`, no vendored dependencies. Every tool is a standalone `*.go` file run via `go run`.
-- **Five-phase reconnaissance pipeline** — subdomain enumeration → HTTP probing → fingerprinting → URL discovery → nuclei scanning, all driven by `scripts/recon.go`.
-- **Diff-based monitoring** — `scripts/monitor.go` watches for newly observed subdomains, endpoints, and certificate transparency entries, with optional Discord alerts.
-- **Targeted vulnerability hunting** — `scripts/hunt.go` runs four hunting phases with category flags (`-type idor`, `-type ssrf`, …).
-- **First-time onboarding** — `scripts/setup.go` verifies required CLI tools and downloads SecLists-style wordlists before the first scan.
-- **Single-command orchestration** — `make full-scan TARGET=…` chains recon + hunt end to end.
-- **GitHub App–owned automation** — `jclee-bot` owns all mutating repository automation, surfaced through GitHub Actions for execution.
-- **LLM-assisted PR review** — `qodo-ai/pr-agent` reviews pull requests through the public LLM gateway at `https://cliproxy.jclee.me/v1`.
+### Tooling core / 도구 핵심
+- **Go stdlib only** — `setup.go`, `recon.go`, `monitor.go`, `hunt.go` use only the Go standard library and shell out to security tools via `os/exec`. No `go.mod`, no vendored dependencies.
+- **Single `go run` invocation** — every script is a standalone `.go` file, so the repo is trivially portable.
+- **Makefile orchestration** — one interface (`make help`) for the whole lifecycle.
+- **Node.js lab surface** — `lab-runner.mjs` and `lab-solver.mjs` for browser-driven, Playwright-powered practice runs.
+
+### Hunting pipeline / 헌팅 파이프라인
+- **5-phase recon** — subdomain enumeration, HTTP probing, endpoint discovery, content parsing, nuclei templated scanning.
+- **Diff-based monitor** — crt.sh polling + baseline diffing to surface *new* subdomains and endpoints, with optional Discord alerting.
+- **4-phase targeted hunt** — pluggable hunt categories (IDOR, SSRF, and more) controlled by a `huntTypes` slice.
+- **Recon+monitor+hunt combined** — `make full-scan` runs the entire vertical slice.
+- **Gitignored output** — scan results, baselines, and reports are kept out of VCS by design.
+
+### Repository automation / 저장소 자동화
+- **App-owned surfaces** — every mutating behavior is owned by the `jclee-bot` GitHub App; workflow files are merely triggers.
+- **Issue lifecycle is automated** — open an issue and the `jclee-bot에의해자동화됨` behavior engages: triaging, labeling, and lifecycle transitions are applied automatically.
+- **PR review with [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent)** — automated code review for every pull request.
+- **PR size & title normalization** — keeps history clean and reviewable.
+- **Stale cleanup** — quiet issues and PRs are surfaced, not silently closed.
+- **Welcome flow** — first-time contributors get a friendly on-ramp.
 
 ---
 
 ## Architecture / 아키텍처
 
-The system is split into two cooperating planes:
-
-1. **Application plane** — the bug-bounty toolkit itself (Go + Node.js scripts, `Makefile`, configuration, runtime output).
-2. **Repository plane** — the `jclee-bot` GitHub App and the GitHub Actions workflows that implement its decisions on issues and pull requests.
+The toolkit is a linear **recon → monitor → hunt → report** pipeline, with a parallel **GitHub App** layer that automates the repository itself. External integrations are reached through a homelab gateway and a public LLM endpoint.
 
 ```mermaid
 flowchart LR
-    subgraph Operator["Operator"]
-        U[Hunters]
+    subgraph Toolkit["Bug Bounty Toolkit / 버그 바운티 툴킷"]
+        direction TB
+        Setup["setup.go<br/>환경 검증 / 도구 점검"]
+        Recon["recon.go<br/>5단계 정찰 파이프라인"]
+        Monitor["monitor.go<br/>차이 모니터링 + crt.sh"]
+        Hunt["hunt.go<br/>4단계 취약점 헌팅<br/>(IDOR / SSRF / ...)"]
+        Report["notes/report-template.md<br/>리포트 산출물"]
     end
 
-    subgraph Toolkit["Bug Bounty Toolkit (Go + Node.js)"]
-        S["setup.go<br/>verify tools + wordlists"]
-        R["recon.go<br/>5-phase recon"]
-        M["monitor.go<br/>diff + crt.sh"]
-        H["hunt.go<br/>4-phase vuln hunt"]
-        LR["lab-runner.mjs<br/>Playwright harness"]
-        LS["lab-solver.mjs<br/>Playwright harness"]
+    subgraph Lab["Browser Lab / 브라우저 랩"]
+        LabRunner["lab-runner.mjs<br/>Playwright 시나리오 실행"]
+        LabSolver["lab-solver.mjs<br/>Playwright 자동 풀이"]
     end
 
-    subgraph Artifacts["Runtime Output (gitignored)"]
-        Reports["reports/"]
-        Alerts["Discord alerts"]
-        Baselines["targets/ baselines"]
-        Wordlists["wordlists/"]
-    end
-
-    subgraph Repo["Repository: jclee941/bug"]
+    subgraph Repo["GitHub Repository / 저장소"]
         Issues["Issues<br/>jclee-bot에의해자동화됨"]
-        PRs["Pull Requests"]
-        Bot["jclee-bot<br/>GitHub App owner"]
+        PRs["Pull Requests<br/>PR review &amp; normalize"]
+        AppCfg["jclee-bot App<br/>(source of truth)"]
     end
 
-    subgraph Review["PR Review Engine"]
-        QA["qodo-ai/pr-agent"]
+    subgraph Homelab["Homelab / 홈랩"]
+        Host["&lt;homelab-host&gt;:8317<br/>CLIProxy"]
+        Elk["&lt;homelab-elk&gt;<br/>ELK / 로그 집계"]
     end
 
-    subgraph Gateway["LLM Gateway"]
-        CP["cliproxy.jclee.me<br/>via &lt;homelab-host&gt;:8317"]
+    subgraph Cloud["Public Endpoints / 퍼블릭 엔드포인트"]
+        Gateway["cliproxy.jclee.me/v1<br/>LLM Gateway (gpt-5.5 / minimax-m3)"]
+        PRReview["qodo-ai/pr-agent<br/>PR Review Engine"]
+        Bot["bot.jclee.me<br/>GitHub App endpoint"]
     end
 
-    U --> S
-    S --> Wordlists
-    S --> R
-    R --> Baselines
-    R --> M
-    M --> Alerts
-    M --> H
-    H --> Reports
-    U --> LR
-    U --> LS
-    U --> Issues
-    U --> PRs
-    PRs --> Bot
-    Bot --> QA
-    QA --> CP
-    Bot --> Issues
+    Setup --> Recon --> Monitor --> Hunt --> Report
+    Recon --> LabRunner
+    LabRunner --> LabSolver
+    Hunt --> Report
+
+    Issues -. 자동화 트리거 .-> AppCfg
+    PRs -. 자동화 트리거 .-> AppCfg
+    AppCfg -. mutate .-> Issues
+    AppCfg -. mutate .-> PRs
+    AppCfg -. hosted at .-> Bot
+
+    Monitor --> Elk
+    Recon --> Host
+    Hunt --> Gateway
+    PRs --> PRReview
+    Report --> Gateway
 ```
 
-Key invariants encoded by the diagram:
-
-- `jclee-bot` is the **owner** of all mutating issue/PR behavior. Workflow files are downstream triggers.
-- Issue automation is marked `jclee-bot에의해자동화됨` to make App ownership visible to readers and contributors.
-- LLM-driven review surfaces route through `cliproxy.jclee.me`, which fronts the homelab-hosted LLM backend.
-- `recon/`, `targets/`, `reports/`, and `wordlists/` are runtime artifacts and never committed.
+### Pipeline notes / 파이프라인 설명
+- **Toolkit layer** is linear; each Go program reads from `config/targets.json` and writes timestamped artifacts to gitignored directories (`recon/`, `targets/`, `reports/`).
+- **Repo automation layer** is App-owned: the `jclee-bot` GitHub App is the *source of truth* for every mutation. The workflows under `.github/workflows/` are only the *event triggers* that wake the App.
+- **Homelab** services are referenced as **placeholders** — `<homelab-host>` and `<homelab-elk>` — and are never hardcoded. The public LLM gateway at [https://cliproxy.jclee.me/v1](https://cliproxy.jclee.me/v1) is the documented endpoint for outbound model calls.
 
 ---
 
 ## Repository Structure / 저장소 구조
 
-The tracked layout of this repository:
-
 ```
 .
-├── AGENTS.md                # Knowledge base for agents and contributors
-├── Makefile                 # Orchestration entry point (make help)
-├── README.md                # This file
-├── package.json             # Node.js metadata (Playwright dependency)
-├── package-lock.json
+├── AGENTS.md                       # Knowledge base / agent reference
+├── Makefile                        # Orchestration entry point (make help)
+├── README.md                       # This document
+├── package.json                    # Node.js metadata (Playwright dep)
+├── package-lock.json               # npm lockfile
 ├── config/
-│   └── targets.json         # Target and notification configuration
+│   └── targets.json                # Target + notification configuration
 ├── notes/
-│   ├── phase2-checklist.md  # Learning checklist
-│   ├── report-template.md   # Bug report template
-│   └── vulnerability-study.md
+│   ├── phase2-checklist.md         # Learning checklist
+│   ├── report-template.md          # Bug report template
+│   └── vulnerability-study.md      # Vulnerability study notes
 └── scripts/
-    ├── setup.go             # Tool verification + wordlist download
-    ├── recon.go             # 5-phase recon pipeline
-    ├── monitor.go           # Diff monitoring + crt.sh + Discord alerts
-    ├── hunt.go              # 4-phase targeted vulnerability hunting
-    ├── lab-runner.mjs       # Playwright-based lab harness
-    └── lab-solver.mjs       # Playwright-based lab harness
+    ├── setup.go                    # Tool verification + wordlist download
+    ├── recon.go                    # 5-phase recon pipeline
+    ├── monitor.go                  # Diff monitoring + crt.sh + Discord
+    ├── hunt.go                     # 4-phase targeted vulnerability hunt
+    ├── lab-runner.mjs              # Playwright scenario runner
+    └── lab-solver.mjs              # Playwright auto-solver
 ```
 
-Runtime directories that are **created on demand and gitignored** (do not commit):
-
-```
-recon/        # Timestamp-stamped scan results
-targets/      # Per-target baselines for diff monitoring
-reports/      # Submitted reports
-wordlists/    # SecLists-style wordlist cache
-```
-
-> The `_bot-scripts/` path may appear transiently as a CI checkout location; it is not a tracked directory in this repository. Do not add it to documentation, automation, or imports.
+> Generated artifacts (`recon/`, `targets/`, `reports/`, `wordlists/`) live outside the tracked tree and are gitignored on purpose. Never commit scan output.
 
 ---
 
 ## jclee-bot Automation Surfaces / jclee-bot 자동화 표면
 
-All mutating repository automation is owned by the `jclee-bot` GitHub App. The App declares the desired behavior; GitHub Actions workflow files only implement the execution triggers. When you see automation in this repository, it is **`jclee-bot에의해자동화됨`**.
+`jclee-bot` is the **GitHub App** that owns every mutating behavior in this repository. Workflow files exist only to forward GitHub events to the App; the App decides what happens. This is the canonical contract.
 
-### Issue surfaces
+`jclee-bot`은 이 저장소의 모든 변동(mutating) 동작을 소유하는 **GitHub App**입니다. 워크플로우 파일은 GitHub 이벤트를 App으로 전달하는 역할만 하며, 실제 동작은 App이 결정합니다. 이것이 표준 계약입니다.
 
-- **Welcome new contributors** — first-time issue/PR authors receive a greeting pointing to the contribution guide.
-- **Issue labeling** — incoming issues are classified by content signals so they can be routed to the right owner.
-- **Issue lifecycle** — `jclee-bot` tracks open issues, applies state transitions (needs-info, duplicate, wontfix, …), and closes stale threads.
-- **Stale management** — long-inactive issues and PRs are flagged and rotated per the project's rotation policy.
+### Automation surfaces (App-owned) / 자동화 표면 (앱 소유)
 
-### Pull request surfaces
+| Surface / 표면 | Behavior / 동작 | Trigger / 트리거 |
+|---|---|---|
+| **Issue triage & labeling** | New issues are labeled and routed automatically. | `issues.opened`, `issues.edited` |
+| **Issue lifecycle** | Stale issues are surfaced; resolved issues are closed with a graceful message. | `issues` schedule / lifecycle events |
+| **PR title & branch normalization** | PR titles and branch names are validated against repo conventions. | `pull_request.opened`, `pull_request.edited` |
+| **PR size check** | Oversized PRs are flagged so reviewers know the blast radius. | `pull_request.opened`, `pull_request.synchronize` |
+| **PR review (engine)** | Automated review comments from [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent). | `pull_request.opened`, `pull_request.synchronize` |
+| **PR security review** | Security-focused review pass on diffs. | `pull_request.opened`, `pull_request.synchronize` |
+| **Auto-merge** | Approved + green PRs are merged automatically. | `pull_request_review`, status checks |
+| **Labeler** | Files-changed-based labels applied to PRs. | `pull_request.opened`, `pull_request.synchronize` |
+| **Stale sweep** | Inactive issues and PRs are surfaced. | schedule (cron) |
+| **Welcome flow** | First-time contributors get a friendly greeting. | `pull_request.opened` (first-timer) |
 
-- **PR labeling** — `labeler.yml` ensures every PR carries the right topical labels.
-- **PR title/body normalization** — PRs are normalized to a conventional format before review.
-- **PR size enforcement** — oversize PRs are flagged with a size label so reviewers can scope the change.
-- **PR review** — `qodo-ai/pr-agent` is invoked by `jclee-bot` to provide an LLM-assisted review through `https://cliproxy.jclee.me/v1`.
-- **PR security review** — a dedicated security-focused review pass runs on diffs that touch sensitive paths.
-- **Auto-merge** — qualifying PRs (passing checks, approvals, conventional title) are merged by `jclee-bot` without manual intervention.
+### Issue automation marker / 이슈 자동화 마커
+> When you open an issue in this repository, the `jclee-bot에의해자동화됨` behavior is engaged: triaging, labeling, and lifecycle transitions are applied automatically by the App, not by a workflow in isolation.
+>
+> 이 저장소에 이슈를 열면, `jclee-bot에의해자동화됨` 동작이 발동됩니다. 분류, 라벨링, 라이프사이클 전환은 워크플로우 단독이 아니라 App에 의해 자동으로 적용됩니다.
 
-### Why this matters / 왜 이렇게 구성했는가
-
-Treating the App as the source of truth means contributors never need to edit workflow files to add new automation — they extend the App's policy and the workflows follow. Workflow files should be read as **execution triggers**, not as policy. The marker `jclee-bot에의해자동화됨` is the contract that signals this ownership on every issue surface.
-
-> GitHub Actions 워크플로우 파일은 자동화의 진실 원천이 아니라 실행 트리거입니다. 새로운 자동화를 추가할 때는 워크플로우를 직접 수정하지 말고 `jclee-bot`의 정책 레이어를 확장하세요.
+### Where the App lives / App 위치
+- **App endpoint**: [https://bot.jclee.me](https://bot.jclee.me)
+- **Triggers**: `.github/workflows/*.yml` (implementation only, not source of truth)
+- **Owner**: `jclee-bot` GitHub App identity
 
 ---
 
 ## Go Tools / Go 도구
 
-Every Go tool is a single-file program with **no `go.mod`** — they are executed via `go run scripts/<name>.go` and depend only on the Go standard library. External tools are invoked through `os/exec`.
+All Go programs are **single-file, stdlib-only** and invoked through `go run scripts/<name>.go`. There is no `go.mod`.
 
-| Tool | File | Role |
-|------|------|------|
-| `setup.go` | `scripts/setup.go` | First-time onboarding. Verifies that required CLI tools (`nuclei`, `httpx`, `subfinder`, `naabu`, `gau`, `waybackurls`, …) are present and downloads SecLists-style wordlists into `wordlists/`. |
-| `recon.go` | `scripts/recon.go` | Five-phase reconnaissance pipeline. Subdomain enumeration → HTTP probing → fingerprinting → URL discovery → nuclei scanning. Supports `-skip-nuclei` for fast mode. |
-| `monitor.go` | `scripts/monitor.go` | Diff-based change detection. Compares current scan output against the stored baseline under `targets/<domain>/`, surfaces new subdomains, new endpoints, and fresh crt.sh entries, and emits optional Discord alerts. |
-| `hunt.go` | `scripts/hunt.go` | Four-phase targeted vulnerability hunting. Supports `-type idor`, `-type ssrf`, and other categories enumerated in the `huntTypes` slice. |
+### `scripts/setup.go`
+First-time environment bootstrap.
+- Verifies required external tools are installed and on `PATH` (subfinder, amass, httpx, nuclei, katana, gau, waybackurls, etc.).
+- Downloads SecLists-derived wordlists into the gitignored `wordlists/` directory.
+- Entry point: `make setup`.
 
-Add a new hunt category by appending to the `huntTypes` slice in `scripts/hunt.go` and providing a runner function. Add a new recon phase by extending the phase slice in `scripts/recon.go`. Add a new CLI tool dependency by listing it in the verification block of `scripts/setup.go`.
+### `scripts/recon.go`
+5-phase reconnaissance pipeline on a single target domain.
+- Phase 1: subdomain enumeration (subfinder / amass).
+- Phase 2: HTTP probing (httpx).
+- Phase 3: endpoint discovery (katana, gau, waybackurls).
+- Phase 4: content parsing & parameter extraction.
+- Phase 5: nuclei templated scanning (skippable via `-skip-nuclei`).
+- Entry point: `make recon TARGET=domain.com`.
 
-> 표준 라이브러리 외 의존성은 없습니다. 모든 외부 도구는 `os/exec` 셸아웃으로 호출되므로, Go 도구 자체는 언제든 `go run`만으로 실행할 수 있습니다.
+### `scripts/monitor.go`
+Diff-based change detection.
+- Maintains a baseline per target under `targets/<domain>.txt`.
+- Polls crt.sh for new certificate transparency entries.
+- Computes a diff (new subdomains / new endpoints) since last baseline.
+- Optional Discord alert on detected changes.
+- Entry point: `make monitor TARGET=domain.com`.
+
+### `scripts/hunt.go`
+4-phase targeted vulnerability hunting.
+- Pluggable hunt categories registered in the `huntTypes` slice.
+- Currently ships with **IDOR** and **SSRF** detectors (extend via `huntTypes`).
+- Filter by category with `-type idor` / `-type ssrf`.
+- Entry point: `make hunt TARGET=domain.com`.
+
+### Conventions / 규약
+- Standalone `.go` files — no `go.mod`, no vendoring.
+- `os/exec` CLI wrappers for external security tools.
+- Results stored in timestamped directories under `recon/`.
+- Output rate-limited (default 100 req/s for nuclei).
+- Sensitive scan data is **always gitignored**.
 
 ---
 
 ## Node.js Tools / Node.js 도구
 
-Two Playwright-based lab harnesses live alongside the Go tools. They are intentionally small and self-contained, and they share the same `Makefile` orchestration philosophy (single command, optional target).
+A thin browser-driven lab surface powered by **Playwright** (`playwright ^1.61.0`).
 
-| Tool | File | Role |
-|------|------|------|
-| `lab-runner.mjs` | `scripts/lab-runner.mjs` | Playwright-driven runner for browser-based lab challenges. Boots a headless browser, navigates to the target, and exercises the configured scenario. |
-| `lab-solver.mjs` | `scripts/lab-solver.mjs` | Playwright-driven solver companion. Pairs with `lab-runner.mjs` to attempt automated resolution of the same scenarios. |
+### `scripts/lab-runner.mjs`
+- Executes Playwright scenarios against a local or remote target.
+- Useful for reproducing client-side attack surfaces (XSS, CSRF, DOM issues) end-to-end.
 
-The only declared Node.js dependency is Playwright (`playwright@^1.61.0`). Run with:
+### `scripts/lab-solver.mjs`
+- Automated solver harness for lab exercises.
+- Pairs with `notes/vulnerability-study.md` and `notes/phase2-checklist.md` for guided practice.
 
+Install before first use:
 ```bash
-node scripts/lab-runner.mjs
-node scripts/lab-solver.mjs
+npm install
+npx playwright install
 ```
 
 ---
 
 ## Configuration / 설정
 
-`config/targets.json` is the single configuration file consumed by the Go tools. It defines:
+### `config/targets.json`
+Single source of truth for targets and notification routing. Add a new target here — never hardcode domains in scripts.
 
-- the list of authorized targets (and their associated program metadata),
-- notification endpoints (e.g. Discord webhook URL for `monitor.go` alerts),
-- per-target rate-limit overrides (default: 100 req/s for nuclei).
+```json
+{
+  "targets": [
+    {
+      "domain": "example.com",
+      "scope": ["example.com", "*.example.com"],
+      "out_of_scope": ["blog.example.com"],
+      "notify": {
+        "discord_webhook_env": "DISCORD_WEBHOOK_EXAMPLE"
+      }
+    }
+  ]
+}
+```
 
-A new target is added by appending an entry to `config/targets.json` — never by hardcoding the domain into a script.
-
-> 새 타겟은 반드시 `config/targets.json`에 등록하고, 절대 스크립트 안에 도메인을 하드코딩하지 마세요.
+### Environment variables / 환경 변수
+| Variable | Purpose |
+|---|---|
+| `DISCORD_WEBHOOK_*` | Per-target Discord webhook (name suffixed by target key). |
+| `CLIProxy_BASE_URL` | LLM gateway base URL — defaults to `https://cliproxy.jclee.me/v1`. |
+| `OPENAI_API_KEY` | Token accepted by the gateway (gpt-5.5 / minimax-m3 fallback). |
+| `GITHUB_TOKEN` | Token used by the `jclee-bot` App for repo automation. |
 
 ---
 
 ## Quick Start / 빠른 시작
 
-### 1. Clone and verify / 클론 및 검증
-
 ```bash
+# 1. Clone
 git clone https://github.com/jclee941/.github
 cd bug
+
+# 2. Verify tools + download wordlists
 make setup
-```
 
-`make setup` will check that every required CLI tool is on `$PATH` and populate `wordlists/`.
+# 3. Add your target to config/targets.json
 
-### 2. Configure a target / 타겟 설정
-
-Edit `config/targets.json` and add the authorized target and a notification endpoint.
-
-### 3. Run the full pipeline / 전체 파이프라인 실행
-
-```bash
+# 4. Run the pipeline
+make recon     TARGET=example.com
+make monitor   TARGET=example.com
+make hunt      TARGET=example.com
 make full-scan TARGET=example.com
 ```
-
-This chains `recon` and `hunt`. For finer-grained control, use the individual targets described in [Commands Reference](#commands-reference--명령어-레퍼런스).
-
-### 4. Enable change monitoring / 변경 모니터링 활성화
-
-```bash
-make monitor TARGET=example.com
-```
-
-`monitor.go` will diff the latest scan against the baseline under `targets/example.com/` and push alerts to the configured Discord webhook.
 
 ---
 
 ## Local Development / 로컬 개발
 
-### Prerequisites / 사전 요구 사항
+### Prerequisites / 사전 요구사항
+- **Go 1.21+** (stdlib only — no modules required)
+- **Node.js 18+** and **npm**
+- **Linux** (primary platform; macOS works for most tools)
+- Common security tooling on `PATH`: `subfinder`, `amass`, `httpx`, `nuclei`, `katana`, `gau`, `waybackurls`, `jq`, `curl`
 
-- **Go** (recent stable) — used to run the Go tools via `go run`.
-- **Node.js** (recent LTS) — used to run the lab harnesses.
-- **External CLI tools** — the verification step in `scripts/setup.go` will tell you which ones are missing. The typical set includes: `subfinder`, `httpx`, `naabu`, `gau`, `waybackurls`, `nuclei`.
-- **Wordlists** — downloaded by `make setup` into `wordlists/`.
-
-### Workflow / 작업 흐름
-
-1. **Branch** — create a feature branch off `main`.
-2. **Edit** — modify a Go tool, the `Makefile`, the configuration, or a node of documentation.
-3. **Smoke test** — `make setup` for tool/wordlist changes; `make recon-fast TARGET=<your-test-target>` for recon changes; `make hunt TYPE=idor TARGET=<your-test-target>` for hunt changes.
-4. **Open a PR** — the PR surfaces (`jclee-bot에의해자동화됨`) will normalize the title, label the change, run size enforcement, and trigger `qodo-ai/pr-agent` review via `https://cliproxy.jclee.me/v1`.
-5. **Auto-merge** — once checks and reviews pass, `jclee-bot` will merge the PR.
-
-### Adding a new hunt category / 새 헌트 카테고리 추가
-
-```go
-// in scripts/hunt.go
-var huntTypes = []string{"idor", "ssrf", "your-new-category"}
+### First-time setup / 최초 설정
+```bash
+make setup              # Verifies tools, downloads wordlists
+npm install             # Installs Playwright
+npx playwright install  # Downloads browser binaries
 ```
 
-Provide a runner function in the same file and call it from the dispatcher.
+### Editing the Go tools / Go 도구 편집
+- Each script is a single `.go` file. Edit it directly.
+- Run with `go run scripts/<name>.go -d <target>`.
+- No build step, no `go.mod` — keep it that way.
 
-### Adding a new recon phase / 새 정찰 단계 추가
+### Editing the Node.js lab / Node.js 랩 편집
+- Modify `scripts/lab-runner.mjs` or `scripts/lab-solver.mjs`.
+- Run with `node scripts/lab-runner.mjs` (or via npm script you add to `package.json`).
 
-```go
-// in scripts/recon.go — extend the phase slice
-var phases = []Phase{
-    {Name: "subdomain-enum", Run: runSubdomainEnum},
-    // ...
-    {Name: "your-new-phase", Run: runYourNewPhase},
-}
-```
+### Adding a new hunt category / 헌팅 카테고리 추가
+1. Open `scripts/hunt.go`.
+2. Append a new entry to the `huntTypes` slice.
+3. Wire up the detector function.
+4. Test: `make hunt-<category> TARGET=example.com`.
+
+### Generated output / 생성 산출물
+The following directories are **gitignored** and used at runtime:
+- `recon/` — timestamped recon results
+- `targets/` — per-target baselines
+- `reports/` — submitted report drafts
+- `wordlists/` — SecLists downloads
 
 ---
 
-## Commands Reference / 명령어 레퍼런스
+## Commands Reference / 명령어 참조
 
-All commands are defined in the `Makefile` and are listed by `make help`.
+Run `make help` for the canonical, in-tree list. The table below mirrors the Makefile.
 
-| Command | Purpose |
-|---------|---------|
-| `make help` | Show the full command catalog with descriptions. |
-| `make setup` | First-time setup: verify tools, download wordlists. |
-| `make recon TARGET=example.com` | Run the full 5-phase recon pipeline. |
-| `make recon-fast TARGET=example.com` | Run recon without the nuclei phase. |
-| `make monitor TARGET=example.com` | Diff current state against the baseline and alert on new findings. |
-| `make hunt TARGET=example.com` | Run all hunt categories. |
-| `make hunt-idor TARGET=example.com` | Hunt IDOR vulnerabilities only. |
-| `make hunt-ssrf TARGET=example.com` | Hunt SSRF vulnerabilities only. |
-| `make full-scan TARGET=example.com` | Chain recon + hunt in one pass. |
-| `make clean` | Remove runtime output (`recon/`, `targets/`, `reports/`, `wordlists/`). |
+| Command | Description |
+|---|---|
+| `make help` | Show all available commands and examples. |
+| `make setup` | First-time setup — verify tools, download wordlists. |
+| `make recon TARGET=domain.com` | Run full 5-phase recon pipeline. |
+| `make recon-fast TARGET=domain.com` | Quick recon — skip nuclei scan. |
+| `make monitor TARGET=domain.com` | Diff monitoring — detect new subdomains/endpoints. |
+| `make hunt TARGET=domain.com` | Run all vulnerability hunt categories. |
+| `make hunt-idor TARGET=domain.com` | Hunt IDOR vulnerabilities only. |
+| `make hunt-ssrf TARGET=domain.com` | Hunt SSRF vulnerabilities only. |
+| `make full-scan TARGET=domain.com` | Recon + hunt combined. |
+| `make clean` | Remove generated scan results. |
 
-Every `TARGET=` command also accepts the underlying Go tool's native flags by extending the `Makefile` target.
+Every command requires `TARGET=...` unless explicitly noted. The Makefile enforces this with a guard.
 
 ---
 
-## Output & Conventions / 출력과 컨벤션
+## LLM Gateway Integration / LLM 게이트웨이 연동
 
-- **Stdlib-only Go** — no `go.mod`, no vendored modules. Run with `go run scripts/<name>.go`.
-- **External tools** — invoked through `os/exec`. The Go tools themselves are thin orchestrators.
-- **Timestamped output** — scan results land in `recon/<timestamp>/` so multiple runs never overwrite each other.
-- **Per-target baselines** — `targets/<domain>/` stores the last-known good state used by `monitor.go` for diffing.
-- **Gitignored runtime** — `recon/`, `targets/`, `reports/`, and `wordlists/` are never committed.
-- **Rate limit** — default 100 req/s for nuclei; override per target in `config/targets.json`.
-- **Korean / English** — documentation is bilingual by convention. Code identifiers stay in English; user-facing strings may carry both languages.
+Outbound LLM calls (used by `hunt.go` triage and report drafting) are routed through a public gateway rather than a direct provider connection.
+
+- **Endpoint**: [https://cliproxy.jclee.me/v1](https://cliproxy.jclee.me/v1)
+- **Primary model**: `gpt-5.5`
+- **Fallback model**: `minimax-m3` (via CLIProxyAPI)
+- **Configuration**: `CLIProxy_BASE_URL` and `OPENAI_API_KEY` env vars
+
+This decoupling means a provider outage or model deprecation is a one-line change in the env, not a code change.
 
 ---
 
 ## Contribution Guide / 기여 가이드
 
-Contributions of all sizes are welcome — bug fixes, new hunt categories, new recon phases, additional lab harnesses, and documentation improvements.
+Contributions are welcome and the `jclee-bot` App is set up to make the path smooth.
 
-### Process / 절차
+### Workflow / 작업 흐름
+1. **Open an issue first** — describe the bug, the target surface, or the hunt category you want to add. The `jclee-bot에의해자동화됨` behavior will triage it for you.
+2. **Fork and branch** — branch name should match the PR title prefix the App expects (PR title normalization is enforced).
+3. **Keep PRs small** — the `pr-size` surface will warn on oversized diffs; respect the signal.
+4. **Wait for review** — the [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent) review will comment automatically; a maintainer will follow up.
+5. **Auto-merge** — once approved and green, the App handles the merge.
 
-1. **Open an issue first** for non-trivial changes so `jclee-bot` can label it correctly and route it to the right owner. Issue handling is `jclee-bot에의해자동화됨`.
-2. **Fork and branch** from `main`.
-3. **Follow the conventions** in [Output & Conventions](#output--conventions--출력과-컨벤션). Keep Go tools stdlib-only.
-4. **Write a clear PR title** in conventional format. `jclee-bot` will normalize titles that don't comply.
-5. **Wait for the review surfaces** — `qodo-ai/pr-agent` (via `https://cliproxy.jclee.me/v1`) will produce an LLM review, and the security review pass will run on sensitive-path diffs. Both are owned by `jclee-bot`.
-6. **Pass size enforcement** — keep PRs small. Oversize PRs are labeled, not blocked, but reviewers may request a split.
-7. **Auto-merge** — once checks and approvals land, `jclee-bot` merges the PR for you.
+### Coding conventions / 코딩 규약
+- **Go**: stdlib only, single-file scripts, no `go.mod`. Wrap external tools with `os/exec`.
+- **Node.js**: keep lab scripts in `scripts/`, prefer ES modules (`.mjs`), do not introduce new runtime dependencies without discussion.
+- **Targets**: never hardcode domains in scripts — use `config/targets.json`.
+- **Output**: never commit `recon/`, `targets/`, `reports/`, or `wordlists/` content.
 
-### Code of conduct / 행동 강령
-
-- Only scan targets for which you have explicit program authorization.
-- Never exceed published rate limits.
-- Never commit scan output, baselines, or reports.
-- Be respectful in issues and reviews — automation is owned by `jclee-bot`; tone is owned by humans.
-
-> 모든 mutating 자동화는 `jclee-bot`이 소유합니다. 워크플로우 파일을 직접 수정해 새로운 동작을 추가하지 마세요. 정책 변경은 App 레이어에서, 실행 트리거는 워크플로우에서 다루는 것이 이 저장소의 규약입니다.
+### Reporting vulnerabilities in this repo / 저장소 내 취약점 보고
+Open a **private security advisory** rather than a public issue. The `pr-review-security` App surface will route it appropriately.
 
 ---
 
-## Security & Ethics / 보안과 윤리
+## Responsible Use & Disclaimer / 책임 있는 사용 및 면책
 
-This toolkit is intended for **authorized security testing only** — bug-bounty programs, red-team engagements with written authorization, and personal lab environments. The authors and the `jclee-bot` App disclaim all responsibility for use against unauthorized targets.
+This toolkit is provided for **authorized security testing only**.
 
-- Never hardcode targets into scripts.
-- Never commit scan results, baselines, or reports.
-- Always respect program scope and rate limits.
-- Treat all findings as confidential until coordinated disclosure is complete.
+- **Only run scans against targets you have explicit, written authorization to test.**
+- Respect program scope (`config/targets.json` is the source of truth for in-scope assets).
+- Honor rate limits — the default 100 req/s for nuclei is a *ceiling*, not a target.
+- Do not exfiltrate, store, or publish customer data discovered during testing.
+- The maintainers are not responsible for misuse of this software.
 
----
+이 도구킷은 **공인된 보안 테스트 전용**입니다.
 
-## Acknowledgments / 감사의 말
-
-- **PR review engine** — [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent)
-- **LLM gateway** — [cliproxy.jclee.me](https://cliproxy.jclee.me/v1)
-- **Repository automation owner** — `jclee-bot` (GitHub App)
-- **README generation** — primary model `gpt-5.5`, fallback `minimax-m3` via the CLIProxyAPI gateway.
+- **명시적이고 서면으로 허가된 대상**에 대해서만 스캔을 실행하세요.
+- 프로그램의 스코프를 준수하고, 비율 제한을 존중하며, 발견한 고객 데이터를 유출·저장·공개하지 마세요.
+- 본 소프트웨어의 오용에 대한 책임은 사용자에게 있으며, 유지보수자는 책임지지 않습니다.
 
 ---
 
 ## License / 라이선스
 
-ISC — see the [`LICENSE`](./LICENSE) file.
+[ISC](./LICENSE) — see the `LICENSE` file for the full text.
+
+---
+
+## Acknowledgments / 감사의 말
+
+- **[qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent)** — PR review engine that powers the `pr-review` and `pr-review-security` surfaces.
+- **[cliproxy.jclee.me](https://cliproxy.jclee.me/v1)** — public LLM gateway (gpt-5.5 primary, minimax-m3 fallback via CLIProxyAPI).
+- **[bot.jclee.me](https://bot.jclee.me)** — the `jclee-bot` GitHub App endpoint that owns every mutating automation surface in this repository.
+- **SecLists** — wordlist backbone for `setup.go` and the recon pipeline.
+- **ProjectDiscovery** — subfinder, httpx, nuclei, katana.
