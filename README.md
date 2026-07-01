@@ -1,8 +1,8 @@
 # Bug Bounty Automation Toolkit / 버그 바운티 자동화 툴킷
 
-> Reconnaissance, monitoring, and targeted vulnerability hunting for responsible security research and bug bounty programs.
+> Reconnaissance, change monitoring, and targeted vulnerability hunting for responsible security research and bug bounty programs.
 >
-> 책임 있는 보안 연구 및 버그 바운티 프로그램을 위한 정찰, 모니터링, 표적형 취약점 헌팅 도구 모음입니다.
+> 책임 있는 보안 연구 및 버그 바운티 프로그램을 위한 정찰, 변경 모니터링, 표적형 취약점 헌팅 도구 모음입니다.
 
 ---
 
@@ -18,89 +18,92 @@ A Go-orchestrated security toolkit that wraps external CLI tooling to cover the 
 - **Application security engineers** tracking asset changes over time / 자산 변화를 지속적으로 추적하는 애플리케이션 보안 엔지니어
 - **CTF / lab participants** practicing exploitation in safe environments / 안전한 환경에서 익스플로잇을 연습하는 CTF · 실습 참여자
 
-### Responsible Use / 책임 있는 사용
+---
 
-Run this toolkit only against systems you are explicitly authorized to test — your own assets, scoped bug bounty programs, or dedicated lab platforms such as PortSwigger Web Security Academy, HackTheBox, or TryHackMe. Unauthorized scanning may violate computer-misuse laws in your jurisdiction. Scripts default to conservative rate limits (`nuclei` capped at 100 req/s) and write results locally so no data is exfiltrated without an explicit forward step.
+## Features / 기능
 
-본 툴킷은 명시적으로 테스트 권한을 부여받은 시스템(자체 자산, 스코프가 정의된 버그 바운티 프로그램, PortSwigger Web Security Academy, HackTheBox, TryHackMe 같은 전용 실습 플랫폼)에서만 실행해야 합니다. 허가되지 않은 스캔은 관할 지역의 컴퓨터 오용 법률을 위반할 수 있습니다. 스크립트는 기본적으로 보수적인 속도 제한(`nuclei` 100 req/s 캡)을 사용하며, 명시적인 전파 단계 없이는 결과물이 로컬에 머무르도록 설계되어 있습니다.
+| Area | Capability | 비고 |
+|------|------------|------|
+| Setup | Tool verification + SecLists wordlist download | `scripts/setup.go` |
+| Recon | 5-phase pipeline (subdomain enum → HTTP probe → URL harvest → nuclei scan → aggregation) | `scripts/recon.go` |
+| Monitoring | Baseline diffing against crt.sh + Discord alerting on new subdomains/endpoints | `scripts/monitor.go` |
+| Hunting | Targeted vulnerability scanning by category (IDOR, SSRF, …) | `scripts/hunt.go` |
+| Labs | Browser automation for PortSwigger / HTB / THM-style exercises | `scripts/lab-runner.mjs`, `scripts/lab-solver.mjs` |
+| Reporting | Markdown report template bundled with the toolkit | `notes/report-template.md` |
+| Orchestration | Single `Makefile` exposes every entry point with `--help` discoverability | root `Makefile` |
+
+### Design Principles / 설계 원칙
+
+- **Stdlib-only Go** — scripts are standalone files run via `go run`, no `go.mod`, no external Go deps. / 표준 라이브러리만 사용하는 Go — 단독 파일로 `go run` 실행, `go.mod` 없음, 외부 Go 의존성 없음.
+- **External tools via `os/exec`** — the toolkit orchestrates, it does not re-implement, security scanners. / `os/exec`를 통한 외부 도구 호출 — 툴킷은 오케스트레이션만 수행하며 보안 스캐너를 다시 구현하지 않습니다.
+- **Local-first artifacts** — every scan is written to a timestamped, gitignored directory; nothing is uploaded automatically. / 로컬 우선 결과물 — 모든 스캔은 타임스탬프가 붙은 gitignore 디렉터리에 기록되며 자동 업로드되지 않습니다.
+- **Explicit operator forwarding** — Discord/webhook delivery only fires when a target is configured. / 명시적인 운영자 전파 — Discord/webhook 알림은 대상이 설정된 경우에만 발송됩니다.
 
 ---
 
-## Features / 주요 기능
+## Repository Layout / 저장소 구성
 
-- **Multi-phase reconnaissance pipeline** — subdomain enumeration, HTTP probing, historical URL collection, template-based scanning / 서브도메인 열거, HTTP 프로빙, 과거 URL 수집, 템플릿 기반 스캔을 수행하는 다단계 정찰 파이프라인
-- **Continuous diff-based monitoring** — detects new subdomains and endpoints via crt.sh and per-target baselines / crt.sh 와 타겟별 베이스라인을 통해 새로운 서브도메인과 엔드포인트를 감지하는 지속적 diff 기반 모니터링
-- **Targeted vulnerability hunting** — focused modules for high-impact bug classes such as IDOR and SSRF / IDOR · SSRF 등 영향력이 큰 버그 클래스에 특화된 모듈
-- **Browser-driven lab solver** — Playwright-based Node.js runner for walkthroughs and lab exercises / 워크스루와 실습을 위한 Playwright 기반 Node.js 러너
-- **Single entry point** — every workflow routed through one `Makefile` for consistency across machines and CI runners / 모든 워크플로우가 단일 `Makefile`을 통해 라우팅되어 머신과 CI 러너 간 일관성 보장
-- **Stdlib-only Go scripts** — no module management overhead, run with `go run` / 모듈 관리 오버헤드 없는 표준 라이브러리만 사용하는 Go 스크립트
-- **Timestamped, gitignored output** — every run produces a unique output directory; the working tree stays clean / 모든 실행이 고유한 출력 디렉터리를 생성하며 작업 트리는 깨끗하게 유지됩니다
+```
+.
+├── AGENTS.md                  # Knowledge base for contributors / 기여자용 지식 베이스
+├── CONTRIBUTING.md            # Contribution guide / 기여 가이드
+├── LICENSE                    # ISC license / ISC 라이선스
+├── Makefile                   # Single entry point for every command / 모든 명령의 단일 진입점
+├── README.md                  # This file / 본 문서
+├── package.json               # Playwright dependency for lab scripts / 실습 스크립트의 Playwright 의존성
+├── package-lock.json          # Locked Playwright tree / 고정된 Playwright 트리
+├── config/
+│   └── targets.json           # Target + notification configuration / 대상 + 알림 설정
+├── notes/
+│   ├── phase2-checklist.md    # Learning checklist / 학습 체크리스트
+│   ├── report-template.md     # Bug report template / 버그 리포트 템플릿
+│   └── vulnerability-study.md # Vulnerability study notes / 취약점 연구 노트
+└── scripts/
+    ├── setup.go               # Tool verification + wordlist download / 도구 검증 + 워드리스트 다운로드
+    ├── recon.go               # 5-phase recon pipeline / 5단계 정찰 파이프라인
+    ├── monitor.go             # Diff monitoring + crt.sh + Discord alerts / diff 모니터링 + crt.sh + Discord 알림
+    ├── hunt.go                # 4-phase vulnerability hunting / 4단계 취약점 헌팅
+    ├── lab-runner.mjs         # Playwright lab automation runner / Playwright 실습 자동화 러너
+    └── lab-solver.mjs         # Playwright lab challenge solver / Playwright 실습 챌린지 솔버
+```
+
+The following runtime directories are created on demand and excluded from version control: / 다음 런타임 디렉터리는 필요 시 생성되며 버전 관리에서 제외됩니다:
+
+| Directory | Purpose | 목적 |
+|-----------|---------|------|
+| `recon/` | Timestamped scan results | 타임스탬프가 붙은 스캔 결과 |
+| `targets/` | Per-target baselines for diffing | diff를 위한 대상별 베이스라인 |
+| `reports/` | Submitted bug report drafts | 제출한 버그 리포트 초안 |
+| `wordlists/` | Downloaded SecLists archives | 다운로드한 SecLists 아카이브 |
 
 ---
 
 ## Architecture / 아키텍처
 
-### Repository layout / 저장소 레이아웃
+The toolkit is a thin orchestrator on top of proven open-source scanners. Each Go script owns one phase of the workflow; Node.js scripts cover the browser side. / 본 툴킷은 검증된 오픈소스 스캐너 위의 얇은 오케스트레이터입니다. 각 Go 스크립트는 워크플로우의 한 단계를 담당하며, Node.js 스크립트는 브라우저 측을 다룹니다.
 
-```
-.
-├── AGENTS.md                # Operator knowledge base (project-internal docs)
-├── CONTRIBUTING.md          # Contribution guidelines
-├── LICENSE                  # ISC license
-├── Makefile                 # Single entry point for every workflow
-├── README.md                # This document
-├── package-lock.json        # Pinned Node.js dependency lockfile
-├── package.json             # Playwright dependency manifest
-├── config/
-│   └── targets.json         # Per-target configuration and notification routing
-├── notes/
-│   ├── phase2-checklist.md  # Learning checklist (operator notes)
-│   ├── report-template.md   # Bug report template
-│   └── vulnerability-study.md # Vulnerability study notes
-└── scripts/
-    ├── setup.go             # Tool verification + wordlist bootstrap
-    ├── recon.go             # Multi-phase recon pipeline
-    ├── monitor.go           # Diff monitoring + crt.sh + Discord alerts
-    ├── hunt.go              # Targeted vulnerability hunting
-    ├── lab-runner.mjs       # Playwright-based lab runner (Node.js)
-    ├── lab-solver.mjs       # Playwright-based lab solver (Node.js)
-    └── recon.go             # Multi-phase recon pipeline
-```
+### Request flow / 요청 흐름
 
-> Runtime artifacts (`recon/`, `targets/`, `reports/`, `wordlists/`) are created on first execution and are excluded by `.gitignore`. They never appear in the working tree unless a script has been run locally.
->
-> 실행 시점 산출물(`recon/`, `targets/`, `reports/`, `wordlists/`)은 최초 실행 시 생성되며 `.gitignore`로 제외됩니다. 스크립트를 로컬에서 실행하지 않는 한 작업 트리에 나타나지 않습니다.
+1. Operator runs a `make` target with `TARGET=example.com` (and optional flags). / 운영자가 `TARGET=example.com`과 선택적 플래그로 `make` 타겟을 실행합니다.
+2. `Makefile` invokes the corresponding Go script via `go run scripts/<phase>.go`. / `Makefile`이 `go run scripts/<phase>.go`로 해당 Go 스크립트를 호출합니다.
+3. The Go script validates the target, then shells out to external tools (`subfinder`, `httpx`, `nuclei`, …) using `os/exec`. / Go 스크립트가 대상을 검증한 뒤 `os/exec`로 외부 도구(`subfinder`, `httpx`, `nuclei` …)를 호출합니다.
+4. Tool output is normalized and written to a timestamped subdirectory under `recon/` (or `targets/` for baselines). / 도구 출력이 정규화되어 `recon/`(또는 베이스라인은 `targets/`) 아래 타임스탬프 하위 디렉터리에 기록됩니다.
+5. On monitoring runs, `monitor.go` diffs the new snapshot against the stored baseline and posts alerts to Discord when configured. / 모니터링 실행 시 `monitor.go`가 새 스냅샷과 저장된 베이스라인을 diff하고, 설정되어 있으면 Discord로 알림을 보냅니다.
+6. For browser-based labs, `lab-runner.mjs` / `lab-solver.mjs` drive Playwright through a Chromium browser to walk or solve exercises locally. / 브라우저 기반 실습의 경우 `lab-runner.mjs` / `lab-solver.mjs`가 Playwright로 Chromium 브라우저를 구동하여 로컬에서 실습을 진행하거나 풀이합니다.
 
-### Components / 구성 요소
+### Component map / 구성 요소 맵
 
-| Component | Language | Purpose | Entry point |
-|-----------|----------|---------|-------------|
-| `scripts/setup.go` | Go (stdlib) | Verify CLI tooling, fetch SecLists wordlists | `make setup` |
-| `scripts/recon.go` | Go (stdlib) | 5-phase recon: subfinder → httpx → waybackurls → nuclei → summary | `make recon` |
-| `scripts/monitor.go` | Go (stdlib) | Diff new subdomains/endpoints, push alerts via Discord webhook | `make monitor` |
-| `scripts/hunt.go` | Go (stdlib) | 4-phase targeted vuln hunts (IDOR, SSRF, …) | `make hunt` |
-| `scripts/lab-runner.mjs` | Node.js (Playwright) | Drive browser sessions for lab exercises | invoked via Node |
-| `scripts/lab-solver.mjs` | Node.js (Playwright) | Solve lab challenges end-to-end via Playwright | invoked via Node |
-| `config/targets.json` | JSON | Target registry, rate-limit overrides, notification routing | read by Go scripts |
-| `Makefile` | Make | Single command surface, dependency-ordered targets | `make help` |
-| `package.json` | npm | Declares Playwright runtime for the two lab scripts | `npm install` |
-
-### Execution flow / 실행 흐름
-
-1. **Operator invocation** — run `make <command> TARGET=<domain>` (or invoke a script directly with `go run` / `node`).
-   **운영자 호출** — `make <command> TARGET=<domain>`을 실행합니다 (또는 `go run` / `node`로 스크립트를 직접 호출).
-2. **Target resolution** — the Go script reads `config/targets.json` for any per-target overrides (rate limits, webhook URL, scope flags).
-   **타겟 해석** — Go 스크립트가 `config/targets.json`을 읽어 타겟별 오버라이드(속도 제한, 웹훅 URL, 스코프 플래그)를 가져옵니다.
-3. **CLI orchestration** — the Go script calls each external tool sequentially via `os/exec`, streaming output line-by-line to stdout.
-   **CLI 오케스트레이션** — Go 스크립트가 외부 도구를 `os/exec`로 순차 호출하여 줄 단위 stdout 스트리밍을 수행합니다.
-4. **Diff stage (monitor only)** — `monitor.go` compares fresh output against the persisted baseline under `targets/<domain>/` and reports deltas.
-   **Diff 단계 (monitor 전용)** — `monitor.go`가 `targets/<domain>/` 아래의 영속 베이스라인과 새로 수집된 결과를 비교하여 델타를 보고합니다.
-5. **Optional alerting** — when a webhook URL is configured for the target, `monitor.go` posts a Discord notification summarizing new findings.
-   **선택적 알림** — 타겟에 웹훅 URL이 설정되어 있으면 `monitor.go`가 새로운 발견 사항을 요약한 Discord 알림을 게시합니다.
-6. **Artifact write** — all stage outputs land in a single timestamped directory under `recon/<domain>-<timestamp>/` so multiple runs never collide.
-   **산출물 기록** — 모든 단계 출력이 `recon/<domain>-<timestamp>/` 아래 단일 타임스탬프 디렉터리에 기록되어 여러 실행이 충돌하지 않습니다.
-7. **Lab path (Node.js)** — for browser-driven workflows, the operator launches `node scripts/lab-runner.mjs` (or `lab-solver.mjs`) directly; Playwright manages the headless browser session locally.
-   **실습 경로 (Node.js)** — 브라우저 기반 워크플로우의 경우 운영자가 `node scripts/lab-runner.mjs` (또는 `lab-solver.mjs`)를 직접 실행하며, Playwright가 로컬 헤드리스 브라우저 세션을 관리합니다.
+| Component | Runtime | Responsibilities | 책임 |
+|-----------|---------|------------------|------|
+| `Makefile` | GNU Make | Discoverable entry points, flag forwarding | 진입점 노출, 플래그 전달 |
+| `setup.go` | Go stdlib | Verify scanner binaries, fetch SecLists | 스캐너 바이너리 검증, SecLists 다운로드 |
+| `recon.go` | Go stdlib | 5-phase recon pipeline orchestration | 5단계 정찰 파이프라인 오케스트레이션 |
+| `monitor.go` | Go stdlib | Baseline diff + crt.sh polling + Discord webhooks | 베이스라인 diff + crt.sh 폴링 + Discord 웹훅 |
+| `hunt.go` | Go stdlib | Category-based vulnerability scanning | 카테고리 기반 취약점 스캔 |
+| `lab-runner.mjs` | Node.js + Playwright | Drive a Chromium browser through lab steps | Chromium 브라우저로 실습 단계 진행 |
+| `lab-solver.mjs` | Node.js + Playwright | Targeted lab challenge solving | 표적형 실습 챌린지 풀이 |
+| `config/targets.json` | Static JSON | Per-target config: scope, hooks, options | 대상별 설정: 스코프, 훅, 옵션 |
+| `notes/` | Markdown | Checklists and report templates | 체크리스트 및 리포트 템플릿 |
 
 ---
 
@@ -108,194 +111,194 @@ Run this toolkit only against systems you are explicitly authorized to test — 
 
 ### Prerequisites / 사전 요구 사항
 
-| Tool | Minimum | Used by |
-|------|---------|---------|
-| Go | 1.21+ | All `scripts/*.go` via `go run` |
-| Node.js | 18+ (LTS) | `scripts/lab-*.mjs` via `node` |
-| External CLI tools | varies | Each Go script verifies presence at startup (subfinder, httpx, nuclei, waybackurls, …) |
-| `make` | any POSIX-compatible | Entry-point dispatcher |
+| Tool | Required by | Install hint |
+|------|-------------|--------------|
+| Go ≥ 1.21 | All `make` targets | https://go.dev/dl/ |
+| Node.js ≥ 18 | `lab-runner.mjs`, `lab-solver.mjs` | https://nodejs.org/ |
+| `subfinder` | `recon`, `monitor` | `go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest` |
+| `httpx` | `recon`, `hunt` | `go install github.com/projectdiscovery/httpx/cmd/httpx@latest` |
+| `nuclei` | `recon`, `hunt` | `go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest` |
+| `waybackurls` | `recon` | `go install github.com/tomnomnom/waybackurls@latest` |
+| Chromium | Lab scripts | Installed automatically by `npx playwright install chromium` |
 
-### First-time setup / 최초 설정
+### First run / 첫 실행
 
 ```bash
-# 1. Clone and enter the repository
-git clone <repository-url> bug
+# Clone the repository / 저장소 클론
+git clone https://github.com/jclee941/jclee-bot
 cd bug
 
-# 2. Install Node.js dependency (Playwright) and its browsers
+# Install Node dependencies for the Playwright lab scripts / Playwright 실습 스크립트 의존성 설치
 npm install
-npx playwright install --with-deps chromium
+npx playwright install chromium
 
-# 3. Verify all CLI tools are present and download seed wordlists
+# Verify all external tools and download wordlists / 외부 도구 검증 및 워드리스트 다운로드
 make setup
-```
 
-`make setup` runs `scripts/setup.go` which checks every required CLI binary, prints remediation hints if anything is missing, and bootstraps the `wordlists/` directory with curated SecLists releases.
-
-`make setup`은 `scripts/setup.go`를 실행하여 필요한 모든 CLI 바이너리를 확인하고, 누락된 항목에 대한 해결 힌트를 출력하며, 선정된 SecLists 릴리스로 `wordlists/` 디렉터리를 부트스트랩합니다.
-
-### First scan / 첫 스캔
-
-```bash
-# Full reconnaissance against a single target
+# Run a full recon pipeline against an authorized target / 승인된 대상에 대해 전체 정찰 실행
 make recon TARGET=example.com
-
-# Continuous monitoring (diff vs. last baseline)
-make monitor TARGET=example.com
-
-# Targeted vulnerability hunting (all categories)
-make hunt TARGET=example.com
 ```
+
+> ⚠️ **Authorization required / 권한 필요** — Only run scans against systems you own or have explicit written permission to test. 본 스캔은 본인이 소유하거나 명시적인 서면 허가를 받은 시스템에서만 실행하세요.
 
 ---
 
 ## Configuration / 설정
 
-All configuration lives in `config/targets.json` so the Go scripts can adjust per-target behavior without code edits. A minimal, illustrative shape:
+All per-target configuration lives in `config/targets.json`. Add or update entries there before invoking any `make` target. The structure typically captures scope, notification webhooks, and per-target overrides. / 모든 대상별 설정은 `config/targets.json`에 위치합니다. `make` 타겟을 호출하기 전에 항목을 추가하거나 갱신하세요. 일반적으로 스코프, 알림 웹훅, 대상별 재정의를 포함합니다.
 
-`config/targets.json`에 모든 설정이 모여 있어 코드 수정 없이 타겟별 동작을 조정할 수 있습니다. 간략한 구조는 다음과 같습니다.
-
-```json
+```jsonc
 {
   "targets": {
     "example.com": {
       "scope": ["example.com", "*.example.com"],
+      "out_of_scope": ["blog.example.com"],
       "rate_limit_rps": 100,
-      "notify_webhook_env": "DISCORD_WEBHOOK_EXAMPLE",
-      "notes": "Authorized through HackerOne program #12345"
+      "discord_webhook_url": "https://discord.com/api/webhooks/<id>/<token>",
+      "notes": "Authorized via program X"
     }
   }
 }
 ```
 
-| Field | Purpose |
-|-------|---------|
-| `scope` | Array of in-scope domains passed to scanners so out-of-scope assets are filtered out / 스코프 내 자산만 남도록 스캐너에 전달되는 스코프 내 도메인 배열 |
-| `rate_limit_rps` | Per-target override for the `nuclei` rate cap (default 100) / `nuclei` 속도 캡에 대한 타겟별 오버라이드 (기본값 100) |
-| `notify_webhook_env` | Name of the environment variable holding the Discord webhook URL (value is never written to disk) / Discord 웹훅 URL을 담고 있는 환경 변수의 이름 (값은 디스크에 기록되지 않음) |
-| `notes` | Free-form field for authorization reference numbers or program scope reminders / 권한 부여 번호나 프로그램 스코프 메모를 위한 자유 형식 필드 |
+| Field | Type | Description | 설명 |
+|-------|------|-------------|------|
+| `scope` | string[] | Domains / wildcards explicitly authorized | 명시적으로 승인된 도메인 / 와일드카드 |
+| `out_of_scope` | string[] | Subdomains to exclude | 제외할 서브도메인 |
+| `rate_limit_rps` | number | Per-tool rate ceiling (default 100) | 도구당 요청 상한 (기본 100) |
+| `discord_webhook_url` | string | Optional Discord alert target | 선택적 Discord 알림 대상 |
+| `notes` | string | Free-form authorization note | 자유 형식의 승인 메모 |
 
-Secrets such as webhook URLs must be supplied through the environment; the scripts read them at runtime and never persist them.
-
-웹훅 URL 같은 비밀 값은 환경 변수를 통해 제공되어야 하며, 스크립트는 실행 시점에 읽어들이고 절대 영속화하지 않습니다.
+The Go scripts never hardcode domains; they read this file or accept `-d` on the command line. / Go 스크립트는 도메인을 하드코딩하지 않으며, 이 파일을 읽거나 명령줄에서 `-d`로 받습니다.
 
 ---
 
 ## Commands Reference / 명령어 레퍼런스
 
-### `make` targets / `make` 타겟
+Run `make help` to print an interactive list at any time. All commands requiring a target take `TARGET=domain.com`. / 언제든 `make help`로 대화형 목록을 출력할 수 있습니다. 대상이 필요한 모든 명령은 `TARGET=domain.com`을 인자로 받습니다.
 
-| Command | Description |
-|---------|-------------|
-| `make help` | Print the command catalog / 명령어 카탈로그 출력 |
-| `make setup` | Verify external tools, download seed wordlists / 외부 도구 확인 및 시드 워드리스트 다운로드 |
-| `make recon TARGET=<domain>` | Run the full 5-phase reconnaissance pipeline / 5단계 정찰 파이프라인 전체 실행 |
-| `make recon-fast TARGET=<domain>` | Skip the `nuclei` stage for quick asset discovery / 빠른 자산 발견을 위해 `nuclei` 단계 생략 |
-| `make monitor TARGET=<domain>` | Diff new findings and push Discord alerts / 새로운 발견 사항을 diff하고 Discord 알림 게시 |
-| `make hunt TARGET=<domain>` | Run all targeted vulnerability categories / 모든 표적형 취약점 카테고리 실행 |
-| `make hunt-idor TARGET=<domain>` | Run only the IDOR module / IDOR 모듈만 실행 |
-| `make hunt-ssrf TARGET=<domain>` | Run only the SSRF module / SSRF 모듈만 실행 |
-| `make full-scan TARGET=<domain>` | Reconnaissance + hunting combined (see Makefile for the full definition) / 정찰 + 헌팅 결합 (Makefile의 전체 정의 참조) |
+| Command | Purpose | 목적 |
+|---------|---------|------|
+| `make help` | Print the command catalog | 명령 카탈로그 출력 |
+| `make setup` | Verify tools, download wordlists | 도구 검증, 워드리스트 다운로드 |
+| `make recon TARGET=x.com` | Full 5-phase recon pipeline | 5단계 정찰 파이프라인 |
+| `make recon-fast TARGET=x.com` | Recon without nuclei scan | nuclei를 제외한 정찰 |
+| `make monitor TARGET=x.com` | Diff vs. baseline, alert on new findings | 베이스라인 대비 diff, 신규 발견 알림 |
+| `make hunt TARGET=x.com` | All vulnerability categories | 전체 취약점 카테고리 |
+| `make hunt-idor TARGET=x.com` | IDOR scan only | IDOR만 스캔 |
+| `make hunt-ssrf TARGET=x.com` | SSRF scan only | SSRF만 스캔 |
+| `make full-scan TARGET=x.com` | Recon + hunt combined | 정찰 + 헌팅 결합 |
+| `make clean` | Remove local scan results | 로컬 스캔 결과 제거 |
 
-### Direct script invocation / 스크립트 직접 호출
+### Go script flags / Go 스크립트 플래그
 
-When you need a flag the `Makefile` does not expose, invoke the scripts directly:
-
-`Makefile`이 노출하지 않는 플래그가 필요할 때는 스크립트를 직접 호출하세요.
+Each Go script accepts its own flags. The `Makefile` wraps the most common ones; invoke the script directly for advanced options. / 각 Go 스크립트는 자체 플래그를 받습니다. `Makefile`이 가장 흔히 쓰는 플래그를 래핑하며, 고급 옵션은 스크립트를 직접 호출하세요.
 
 ```bash
-# Go scripts (stdlib only — no go.mod required)
-go run scripts/recon.go -d example.com
-go run scripts/recon.go -d example.com -skip-nuclei
-go run scripts/monitor.go -d example.com
-go run scripts/hunt.go -d example.com
-go run scripts/hunt.go -d example.com -type idor
-
-# Node.js lab scripts
-node scripts/lab-runner.mjs
-node scripts/lab-solver.mjs
+go run scripts/recon.go   -d example.com -skip-nuclei -out ./recon/custom
+go run scripts/monitor.go -d example.com -baseline ./targets/example.com.json
+go run scripts/hunt.go    -d example.com -type idor -rate 50
 ```
+
+### Lab scripts / 실습 스크립트
+
+The Node.js lab scripts are not wired into the `Makefile`; invoke them directly. / Node.js 실습 스크립트는 `Makefile`에 연결되어 있지 않으므로 직접 호출하세요.
+
+```bash
+# Walk through lab steps with the runner / 러너로 실습 단계 진행
+node scripts/lab-runner.mjs --lab "https://<lab-url>"
+
+# Solve a specific challenge / 특정 챌린지 풀이
+node scripts/lab-solver.mjs --challenge <id>
+```
+
+---
+
+## Output Directories / 출력 디렉터리
+
+Every scan produces a timestamped directory so runs are diffable and never collide. / 모든 스캔은 타임스탬프가 붙은 디렉터리를 생성하여 실행 결과를 비교 가능하고 충돌 없이 관리합니다.
+
+| Directory | Created by | Contents | 내용 |
+|-----------|-----------|----------|------|
+| `recon/<target>/<timestamp>/` | `recon.go`, `hunt.go` | Raw + normalized scanner output | 원본 + 정규화된 스캐너 출력 |
+| `targets/<target>.json` | `monitor.go` | Latest baseline snapshot | 최신 베이스라인 스냅샷 |
+| `reports/<id>/` | Operator | Drafted bug reports from `notes/report-template.md` | 작성 중인 버그 리포트 |
+| `wordlists/` | `setup.go` | SecLists archives | SecLists 아카이브 |
+
+All four are gitignored — never commit scan artifacts. / 네 디렉터리 모두 gitignore 처리되어 있으며 스캔 결과물을 커밋해서는 안 됩니다.
 
 ---
 
 ## Local Development / 로컬 개발
 
-### Working with Go scripts / Go 스크립트 작업
+### Working on Go scripts / Go 스크립트 작업
 
-- The repository deliberately omits a `go.mod`; each script imports only the standard library. Run with `go run scripts/<file>.go` to match the `Makefile` behavior exactly.
-  저장소는 의도적으로 `go.mod`를 생략하며, 각 스크립트는 표준 라이브러리만 임포트합니다. `Makefile` 동작과 정확히 일치시키려면 `go run scripts/<file>.go`로 실행하세요.
-- External tools are invoked through `os/exec`. To add a new dependency, extend the verification table in `scripts/setup.go` first so `make setup` keeps the operator experience honest.
-  외부 도구는 `os/exec`로 호출됩니다. 새 의존성을 추가하려면 먼저 `scripts/setup.go`의 검증 표를 확장하여 `make setup`이 운영자 경험을 그대로 유지하도록 하세요.
-- Target domains must never be hardcoded — they always flow from the `TARGET` make variable or `-d` CLI flag.
-  타겟 도메인은 코드에 하드코딩되어서는 안 되며, 항상 `TARGET` make 변수 또는 `-d` CLI 플래그에서流入합니다.
+- Each Go script is standalone: no `go.mod`, no `go.sum`. Just `go run scripts/<file>.go`. / 각 Go 스크립트는 단독 실행 파일입니다: `go.mod`, `go.sum` 없음. 그냥 `go run scripts/<file>.go`.
+- Stay on the stdlib. Pull requests that introduce external Go dependencies will be rejected. / 표준 라이브러리만 사용하세요. 외부 Go 의존성을 추가하는 PR은 거부됩니다.
+- External tools are invoked through `os/exec`. Wrap each call in a small helper so stdout/stderr capture and exit-code handling stay consistent. / 외부 도구는 `os/exec`로 호출합니다. 각 호출을 작은 헬퍼로 감싸 stdout/stderr 캡처와 종료 코드 처리를 일관되게 유지하세요.
+- Results must always flow through the timestamped-directory convention. / 결과는 항상 타임스탬프 디렉터리 규약을 따라야 합니다.
 
-### Adding a hunt category / 헌팅 카테고리 추가
+### Working on lab scripts / 실습 스크립트 작업
 
-1. Append the new identifier to the `huntTypes` slice in `scripts/hunt.go`.
-   `scripts/hunt.go`의 `huntTypes` 슬라이스에 새 식별자를 추가하세요.
-2. Implement the corresponding dispatch branch and per-category runner in the same file.
-   동일 파일에 해당 디스패치 분기와 카테고리별 러너를 구현하세요.
-3. Add a granular `make hunt-<name>` target in the `Makefile` matching the existing convention.
-   기존 컨벤션에 맞춰 `Makefile`에 세분화된 `make hunt-<name>` 타겟을 추가하세요.
-4. Update `notes/vulnerability-study.md` so the rationale and references live next to the code change.
-   코드 변경 옆에 근거와 참고 자료가 함께 있도록 `notes/vulnerability-study.md`를 업데이트하세요.
+- Both `lab-runner.mjs` and `lab-solver.mjs` are plain ESM JavaScript. / `lab-runner.mjs`와 `lab-solver.mjs`는 일반 ESM JavaScript입니다.
+- The only Node dependency is `playwright`; keep it that way unless absolutely necessary. / 유일한 Node 의존성은 `playwright`이며, 꼭 필요한 경우가 아니면 그대로 유지하세요.
+- Run `npx playwright install chromium` after fresh clones to ensure the browser binary is present. / 새로 클론한 후에는 `npx playwright install chromium`을 실행해 브라우저 바이너리를 확보하세요.
 
-### Output structure / 출력 구조
+### Adding a new hunt category / 새 헌팅 카테고리 추가
 
-Each invocation creates a timestamped directory so runs never overwrite one another:
-
-각 호출은 타임스탬프 디렉터리를 생성하여 실행 간 덮어쓰기가 발생하지 않습니다.
-
-```
-recon/
-└── example.com-20250115T0930Z/
-    ├── 01-subfinder.txt
-    ├── 02-httpx.txt
-    ├── 03-waybackurls.txt
-    ├── 04-nuclei.txt
-    └── summary.json
-```
-
-Baselines for diff-based monitoring live under `targets/<domain>/`; submitted reports (when drafting locally before upload) live under `reports/<program>/`.
-
-Diff 기반 모니터링의 베이스라인은 `targets/<domain>/` 아래에 있고, 로컬에서 작성 후 업로드할 보고서는 `reports/<program>/` 아래에 보관됩니다.
+1. Append the new type identifier to the `huntTypes` slice in `scripts/hunt.go`. / 새 타입 식별자를 `scripts/hunt.go`의 `huntTypes` 슬라이스에 추가합니다.
+2. Add a corresponding `-type` branch in the hunt dispatcher. / 헌팅 디스패처에 해당 `-type` 분기를 추가합니다.
+3. Wire a `make hunt-<name>` target in `Makefile` if you want a dedicated entry point. / 전용 진입점을 원한다면 `Makefile`에 `make hunt-<name>` 타겟을 연결합니다.
+4. Update the `hunt` row in the commands table in this README. / 본 README의 명령어 표에 헌팅 행을 갱신합니다.
 
 ---
 
 ## Testing / 테스트
 
-This project intentionally ships without a formal test runner: the `npm test` script is a placeholder, and the Go scripts are intentionally stdlib-only and have no automated coverage. Validation happens through **manual, scope-bounded smoke runs** plus **dry inspections** of the generated artifacts.
+This toolkit orchestrates external tools, so unit tests live alongside the scripts they exercise. Currently no automated test suite is wired into the `Makefile`; the `npm test` script is a placeholder. / 본 툴킷은 외부 도구를 오케스트레이션하므로 단위 테스트는 해당 스크립트와 함께 위치합니다. 현재 자동화 테스트 스위트는 `Makefile`에 연결되어 있지 않으며 `npm test` 스크립트는 자리표시자입니다.
 
-이 프로젝트는 의도적으로 정식 테스트 러너 없이 출하됩니다. `npm test` 스크립트는 자리표시자이며, Go 스크립트는 의도적으로 표준 라이브러리만 사용하며 자동화된 커버리지를 가지지 않습니다. 검증은 **수동, 스코프 제한 스모크 실행**과 생성된 산출물의 **건조 검사**를 통해 이루어집니다.
-
-### Recommended validation steps / 권장 검증 단계
+Recommended manual checks before submitting changes: / 변경 사항을 제출하기 전 권장되는 수동 점검:
 
 | Check | How |
 |-------|-----|
-| CLI toolchain health / CLI 툴체인 상태 | `make setup` — every required binary must report OK / 필요한 모든 바이너리가 OK를 보고해야 함 |
-| Recon pipeline / 정찰 파이프라인 | Run `make recon-fast TARGET=<authorized-lab-domain>` and confirm files appear under `recon/` / `make recon-fast TARGET=<권한부여된-실습-도메인>`을 실행하고 파일이 `recon/` 아래에 나타나는지 확인 |
-| Monitor deltas / 모니터 델타 | Run `make monitor TARGET=<authorized-lab-domain>` twice on different days; the second run should report zero or expected new findings / 다른 날 `make monitor TARGET=<권한부여된-실습-도메인>`을 두 번 실행하고, 두 번째 실행은 0개 또는 예상 가능한 새 발견을 보고해야 함 |
-| Hunt modules / 헌팅 모듈 | Run `make hunt-idor TARGET=<authorized-lab-domain>` against a known-vulnerable lab endpoint and confirm detection / 알려진 취약 실습 엔드포인트에 `make hunt-idor TARGET=<권한부여된-실습-도메인>`을 실행하고 탐지 여부 확인 |
-| Node.js lab scripts / Node.js 실습 스크립트 | `node scripts/lab-runner.mjs` against an isolated lab instance; verify Playwright boots a headless browser / 격리된 실습 인스턴스에 대해 `node scripts/lab-runner.mjs`를 실행하고 Playwright가 헤드리스 브라우저를 부팅하는지 확인 |
+| Tool verification passes | `make setup` |
+| Help output stays current | `make help` |
+| Each `make` target accepts and rejects bad targets correctly | e.g. `make recon` (no `TARGET`) should fail with a clear error |
+| `recon`, `monitor`, `hunt` produce timestamped output directories | Run against an authorized scope and inspect `recon/` |
+| Lab scripts launch Chromium and navigate without errors | `node scripts/lab-runner.mjs --help` then a known lab |
 
 ---
 
 ## Contribution Guide / 기여 가이드
 
-- **House style** — Go scripts follow the existing `os/exec`-wrapped, stdout-streaming pattern; avoid pulling in third-party Go modules.
-  **하우스 스타일** — Go 스크립트는 기존 `os/exec` 래핑 · stdout 스트리밍 패턴을 따르며, 서드 파티 Go 모듈을 끌어들이지 마세요.
-- **Bilingual docs** — when adding a new Makefile target or a new hunt category, update both the English and Korean sections of this file so the operator knowledge base stays symmetric.
-  **이중 언어 문서** — 새 Makefile 타겟이나 새 헌팅 카테고리를 추가할 때 운영자 지식 베이스의 대칭을 유지하기 위해 이 파일의 영어와 한국어 섹션 모두 업데이트하세요.
-- **Never commit secrets** — webhook URLs and authorization tokens belong in environment variables, not in `config/targets.json` or commit history.
-  **비밀 절대 커밋 금지** — 웹훅 URL과 권한 부여 토큰은 환경 변수에 속하며, `config/targets.json`이나 커밋 이력에 들어가서는 안 됩니다.
-- **Respect scope** — before testing any new target, confirm written authorization and reflect it in `config/targets.json`'s `notes` field.
-  **스코프 존중** — 새 타겟을 테스트하기 전에 서면 권한을 확인하고 `config/targets.json`의 `notes` 필드에 반영하세요.
-- **Process** — see `CONTRIBUTING.md` for the full submission checklist (PR template, required checks, and review expectations).
-  **프로세스** — 전체 제출 체크리스트(PR 템플릿, 필수 검사, 리뷰 기대치)는 `CONTRIBUTING.md`를 참조하세요.
+- Read `AGENTS.md` before opening a PR — it documents the conventions, structure, and anti-patterns. / PR을 열기 전에 `AGENTS.md`를 읽으세요. 규약, 구조, 안티 패턴이 정리되어 있습니다.
+- Keep changes scoped: one phase, one tool, or one hunt category per PR. / 변경 범위를 좁게 유지하세요: PR당 한 단계, 한 도구, 또는 한 헌팅 카테고리.
+- Do not commit scan artifacts under `recon/`, `targets/`, `reports/`, or `wordlists/`. / `recon/`, `targets/`, `reports/`, `wordlists/` 아래의 스캔 결과물을 커밋하지 마세요.
+- Do not hardcode target domains, API keys, or webhook URLs in scripts. / 스크립트에 대상 도메인, API 키, 웹훅 URL을 하드코딩하지 마세요.
+- Respect rate limits (default 100 req/s for nuclei) and the scope declared in `config/targets.json`. / 속도 제한(nuclei 기본 100 req/s)과 `config/targets.json`에 선언된 스코프를 준수하세요.
+- Never add upstream-facing automation such as auto-submitting reports or auto-filing issues. / 리포트 자동 제출이나 이슈 자동 생성 같은 상류 자동화를 추가하지 마세요.
+
+See `CONTRIBUTING.md` for the full process, code review expectations, and sign-off requirements. / 전체 절차, 코드 리뷰 기대치, 서명 요건은 `CONTRIBUTING.md`를 참조하세요.
+
+---
+
+## Responsible Use / 책임 있는 사용
+
+This toolkit must only be used against systems you are explicitly authorized to test — your own assets, scoped bug bounty programs, or dedicated lab platforms such as PortSwigger Web Security Academy, HackTheBox, or TryHackMe. Unauthorized scanning may violate computer-misuse laws (e.g. the U.S. CFAA, the EU Directive on attacks against information systems, Korea의 정보통신망법) and almost certainly violates the target's terms of service.
+
+본 툴킷은 본인이 소유한 자산, 스코프가 명시된 버그 바운티 프로그램, 또는 PortSwigger Web Security Academy, HackTheBox, TryHackMe 같은 전용 실습 플랫폼 등 명시적으로 테스트 권한을 부여받은 시스템에만 사용해야 합니다. 무단 스캔은 컴퓨터 오용 관련 법규(예: 미국 CFAA, EU 정보시스템 공격에 관한 지침, 한국 정보통신망법)를 위반할 수 있으며 대상의 서비스 이용약관을 거의 확실히 위반합니다.
+
+Before every engagement: / 모든 업무 시작 전:
+
+1. Confirm written authorization and capture the scope. / 서면 허가를 확인하고 스코프를 기록하세요.
+2. Respect rate limits and exclude `out_of_scope` entries. / 속도 제한을 준수하고 `out_of_scope` 항목을 제외하세요.
+3. Stop immediately and report responsibly if you encounter sensitive data (PII, credentials, financial records). / 민감 데이터(PII, 자격증명, 금융 기록)를 발견하면 즉시 중단하고 책임감 있게 보고하세요.
 
 ---
 
 ## License / 라이선스
 
-Released under the **ISC License**. See `LICENSE` for the full text.
-**ISC 라이선스** 하에 배포됩니다. 전문은 `LICENSE`를 참조하세요.
+ISC — see the `LICENSE` file in the repository root. / ISC — 저장소 루트의 `LICENSE` 파일을 참조하세요.
+
+- Repository / 저장소: https://github.com/jclee941/bug
+- Issues / 이슈: https://github.com/jclee941/bug/issues
